@@ -9,11 +9,11 @@
 
 ### Phase 2: LangGraph Implementation
 
-* [ ] **2.1 State Definition:** Define a TypedDict for the Graph State (recipes, ingredients, user_approvals, cart_status).
-* [ ] **2.2 Logic Nodes:** Implement the Python functions for filtering and tool calling.
-* [ ] **2.3 Interruption Logic:** Implement a `checkpointer` (SQLite) to allow the graph to pause and resume across Streamlit sessions.
+* [x] **2.1 State Definition:** Define a TypedDict for the Graph State (recipes, ingredients, user_approvals, cart_status).
+* [x] **2.2 Logic Nodes:** Implement the Python functions for filtering and tool calling.
+* [x] **2.3 Interruption Logic:** Implement a `checkpointer` (SQLite) to allow the graph to pause and resume across Streamlit sessions.
 
 ### Phase 3: Frontend & Web Search
 
-* [ ] **3.1 Streamlit Dashboard:** Build a two-column UI (Chat on left, Cart Status/Checklist on right).
-* [ ] **3.2 Agentic Web Search:** Integrate a "Search Node" that uses an LLM to browse for recipes if they aren't found in Mealie, then offers to clip them.
+* [x] **3.1 Streamlit Dashboard:** Build a two-column UI (Chat on left, Cart Status/Checklist on right).
+* [x] **3.2 Agentic Web Search:** Integrate a "Search Node" that uses an LLM to browse for recipes if they aren't found in Mealie, then offers to clip them.

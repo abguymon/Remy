@@ -1,0 +1,10 @@
+# Sane defaults for a backend developer's pantry
+bypass_staples:
+  - salt
+  - black pepper
+  - water
+  - ice
+  - olive oil
+  - flour
+  - baking soda
+  - cornstarch

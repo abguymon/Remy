@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "remy-agent"
+version = "0.1.0"
+description = "LangGraph agent for Remy"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "langgraph",
+    "langchain-core",
+    "langchain-openai",
+    "langchain-community",
+    "ddgs",
+    "aiosqlite",
+    "langgraph-checkpoint-sqlite",
+    "pydantic",
+    "python-dotenv",
+    "streamlit",
+    "httpx",
+    "mcp"
+]
+
+[project.scripts]
+remy-agent = "remy_agent.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/remy_agent"]
