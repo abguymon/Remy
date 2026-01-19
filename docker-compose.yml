@@ -26,8 +26,8 @@ services:
     container_name: mealie-mcp-server
     restart: always
     environment:
-      MEALIE_BASE_URL: http://mealie:9000
-      MEALIE_API_KEY: "change-me"
+      MEALIE_BASE_URL: ${MEALIE_BASE_URL}
+      MEALIE_API_KEY: ${MEALIE_API_KEY}
     ports:
       - "8000:8000"
     networks:
@@ -38,9 +38,9 @@ services:
     container_name: kroger-mcp
     restart: always
     environment:
-      KROGER_CLIENT_ID: "your_kroger_client_id" # Placeholder
-      KROGER_CLIENT_SECRET: "your_kroger_client_secret" # Placeholder
-      KROGER_REDIRECT_URI: "http://localhost:8000/callback" # Placeholder - adjust if necessary
+      KROGER_CLIENT_ID: ${KROGER_CLIENT_ID}
+      KROGER_CLIENT_SECRET: ${KROGER_CLIENT_SECRET}
+      KROGER_REDIRECT_URI: ${KROGER_REDIRECT_URI}
     ports:
       - "8001:8000" # Expose on a different port to avoid conflict with mealie-mcp-server
     networks:
