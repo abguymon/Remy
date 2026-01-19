@@ -197,7 +197,8 @@ async def execute_order_node(state: AgentState) -> Dict[str, Any]:
                     product = products[0]
                     upc = product['upc']
                     
-                    add_res = await call_mcp_tool(KROGER_MCP_URL, "add_items_to_cart", {"items": [{"upc": upc, "quantity": 1}]})
+                    # 2. Add to Cart
+                    add_res = await call_mcp_tool(KROGER_MCP_URL, "add_items_to_cart", {"product_id": upc, "quantity": 1})
                     order_results.append({
                         "item": query,
                         "product": product['description'],

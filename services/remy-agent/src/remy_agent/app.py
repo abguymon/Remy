@@ -94,13 +94,13 @@ with col2:
                 if checked:
                     approved_items.append(item)
             
-            if st.button("🚀 Approve & Order"):
+            if st.button("🚀 Approve & Add to Cart"):
                 # Update state and resume
                 asyncio.run(run_agent({"approved_cart": approved_items}, "update_state"))
                 
-                with st.spinner("Placing order..."):
+                with st.spinner("Adding items to cart..."):
                     asyncio.run(run_agent(None, "invoke"))
-                    st.success("Order request sent to Kroger!")
+                    st.success("Items added to Kroger Cart!")
                     st.rerun()
         
         order_result = state.values.get("order_result")
