@@ -188,7 +188,8 @@ async def execute_order_node(state: AgentState) -> Dict[str, Any]:
     
     for item in approved_cart:
         query = item['original']
-        search_res = await call_mcp_tool(KROGER_MCP_URL, "search_products", {"term": query, "limit": 1})
+        # 1. Search Product
+        search_res = await call_mcp_tool(KROGER_MCP_URL, "search_products", {"search_term": query, "limit": 1})
         if search_res and not search_res.isError:
             try:
                 products = json.loads(search_res.content[0].text)
