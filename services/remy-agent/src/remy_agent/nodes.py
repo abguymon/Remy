@@ -193,7 +193,13 @@ async def execute_order_node(state: AgentState) -> Dict[str, Any]:
         search_res = await call_mcp_tool(KROGER_MCP_URL, "search_products", {"search_term": query, "limit": 1})
         if search_res and not search_res.isError:
             try:
-                products = json.loads(search_res.content[0].text)
+                search_data = json.loads(search_res.content[0].text)
+                # Handle both list (old behavior) and dict (new behavior)
+                if isinstance(search_data, list):
+                    products = search_data
+                else:
+                    products = search_data.get("data", [])
+                
                 if products:
                     product = products[0]
                     upc = product['upc']
