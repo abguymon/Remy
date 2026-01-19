@@ -1,0 +1,63 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kroger-mcp"
+version = "0.2.0"
+description = "FastMCP server for Kroger API integration"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Stephen Thoemmes", email = "thoemmes.stephen@gmail.com"},
+]
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = ["kroger", "mcp", "grocery", "shopping", "retail"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+    "Topic :: Office/Business",
+]
+
+dependencies = [
+    "fastmcp>=2.0.0",
+    "kroger-api>=0.2.0",
+    "requests",
+    "pydantic>=2.0.0",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+    "black",
+]
+
+[project.scripts]
+kroger-mcp = "kroger_mcp.server:main"
+kroger-mcp-cli = "kroger_mcp.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/CupOfOwls/kroger-mcp"
+Repository = "https://github.com/CupOfOwls/kroger-mcp"
+Issues = "https://github.com/CupOfOwls/kroger-mcp/issues"
+Kroger_Documentation = "https://developer.kroger.com/documentation/public/"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kroger_mcp"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/README.md",
+    "/pyproject.toml",
+]

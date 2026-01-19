@@ -1,0 +1,50 @@
+version: '3.8'
+
+networks:
+  remy-net:
+    external: true
+
+services:
+  # Mealie service - uses the base provided mealie.docker-compose.yml content
+  mealie:
+    image: ghcr.io/mealie-recipes/mealie:latest
+    container_name: mealie
+    restart: always
+    ports:
+      - "9925:9000"
+    deploy:
+      resources:
+        limits:
+          memory: 1000M
+    volumes:
+      - mealie-data:/app/data/
+    networks:
+      - remy-net
+
+  mealie-mcp-server:
+    build: ./services/mealie-mcp-server
+    container_name: mealie-mcp-server
+    restart: always
+    environment:
+      MEALIE_BASE_URL: http://mealie:9000
+      MEALIE_API_KEY: "change-me"
+    ports:
+      - "8000:8000"
+    networks:
+      - remy-net
+
+  kroger-mcp:
+    build: ./services/kroger-mcp
+    container_name: kroger-mcp
+    restart: always
+    environment:
+      KROGER_CLIENT_ID: "your_kroger_client_id" # Placeholder
+      KROGER_CLIENT_SECRET: "your_kroger_client_secret" # Placeholder
+      KROGER_REDIRECT_URI: "http://localhost:8000/callback" # Placeholder - adjust if necessary
+    ports:
+      - "8001:8000" # Expose on a different port to avoid conflict with mealie-mcp-server
+    networks:
+      - remy-net
+
+volumes:
+  mealie-data:

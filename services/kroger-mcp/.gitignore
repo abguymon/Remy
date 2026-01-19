@@ -1,0 +1,37 @@
+# Virtual environment
+venv/
+.venv/
+
+# Local Storage / Memory
+*.json
+
+# Token files
+.kroger_token*
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Environment variables
+.env
+
+# IDE files
+.idea/
+.vscode/
+
+# Test coverage
+.coverage
+coverage/
+htmlcov/
+
+# Logs
+*.log
+
+
+PUBLISHING.md

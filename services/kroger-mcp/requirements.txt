@@ -1,0 +1,10 @@
+# FastMCP framework
+fastmcp
+
+# Kroger API client
+kroger-api>=0.2.0
+
+# Additional dependencies (if not already included in kroger-api)
+requests
+pydantic
+python-dotenv
