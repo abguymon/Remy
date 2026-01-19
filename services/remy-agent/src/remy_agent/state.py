@@ -22,6 +22,7 @@ class AgentState(TypedDict):
     # Node 3: Human-in-the-Loop
     # (The pending_cart is presented to user, they modify it -> approved_cart)
     approved_cart: List[Dict[str, Any]]   # Final list to buy
+    fulfillment_method: str               # "PICKUP" or "DELIVERY"
     
     # Node 4: Fulfillment
     order_result: Dict[str, Any]          # Output from Kroger add_to_cart

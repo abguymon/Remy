@@ -2,6 +2,7 @@ import streamlit as st
 import os
 import uuid
 import asyncio
+import json
 from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from remy_agent.graph import get_workflow
@@ -16,11 +17,9 @@ if "thread_id" not in st.session_state:
 # Workflow definition (uncompiled)
 workflow = get_workflow()
 DB_PATH = "data/checkpoints.sqlite"
+KROGER_MCP_URL = os.getenv("KROGER_MCP_URL", "http://kroger-mcp:8000/sse")
 
 st.title("👨‍🍳 Remy: Your Personal Grocery Agent")
-
-# Two-column layout
-col1, col2 = st.columns([2, 1])
 
 # Helper to run the graph asynchronously
 async def run_agent(input_state=None, command="invoke"):
@@ -37,6 +36,70 @@ async def run_agent(input_state=None, command="invoke"):
             return await app.aget_state(config)
         elif command == "update_state":
             return await app.aupdate_state(config, input_state)
+
+# --- Sidebar: Configuration ---
+with st.sidebar:
+    st.header("⚙️ Configuration")
+    
+    # Store Modality
+    modality = st.selectbox("Fulfillment Method", ["PICKUP", "DELIVERY"], index=0)
+    st.session_state.modality = modality
+    
+    st.divider()
+    
+    # Store Location
+    st.subheader("📍 Store Location")
+    zip_code = st.text_input("Zip Code", value="10001")
+    
+    if st.button("🔍 Search Stores"):
+        from mcp.client.sse import sse_client
+        from mcp.client.session import ClientSession
+        
+        async def fetch_stores():
+            try:
+                async with sse_client(KROGER_MCP_URL) as (read, write):
+                    async with ClientSession(read, write) as session:
+                        await session.initialize()
+                        res = await session.call_tool("search_locations", {"zip_code": zip_code})
+                        if res and not res.isError:
+                            data = json.loads(res.content[0].text)
+                            return data.get("data", [])
+            except Exception as e:
+                st.error(f"Error fetching stores: {e}")
+            return []
+            
+        with st.spinner("Searching..."):
+            stores = asyncio.run(fetch_stores())
+            st.session_state.stores = stores
+            
+    if "stores" in st.session_state and st.session_state.stores:
+        store_options = {f"{s['name']} ({s['address']['street']})": s['location_id'] for s in st.session_state.stores}
+        selected_store_name = st.selectbox("Select Store", list(store_options.keys()))
+        selected_store_id = store_options[selected_store_name]
+        
+        if st.button("✅ Set Preferred Store"):
+            async def set_store(sid):
+                try:
+                    async with sse_client(KROGER_MCP_URL) as (read, write):
+                        async with ClientSession(read, write) as session:
+                            await session.initialize()
+                            await session.call_tool("set_preferred_location", {"location_id": sid})
+                            return True
+                except:
+                    return False
+            
+            if asyncio.run(set_store(selected_store_id)):
+                st.success(f"Store set to {selected_store_name}")
+                st.session_state.preferred_store = selected_store_name
+            else:
+                st.error("Failed to set store.")
+
+    if "preferred_store" in st.session_state:
+        st.info(f"Current Store: {st.session_state.preferred_store}")
+
+# --- Main UI ---
+# Two-column layout
+col1, col2 = st.columns([2, 1])
 
 with col1:
     st.subheader("Chat")
@@ -56,8 +119,6 @@ with col1:
         with st.chat_message("assistant"):
             with st.spinner("Remy is thinking..."):
                 input_state = {"messages": st.session_state.messages}
-                
-                # Execute graph
                 result = asyncio.run(run_agent(input_state, "invoke"))
                 
                 new_messages = result.get("messages", [])
@@ -73,7 +134,6 @@ with col1:
 with col2:
     st.subheader("🛒 Cart & Approval")
     
-    # Get current state asynchronously
     state = asyncio.run(run_agent(command="get_state"))
     
     if state and state.values:
@@ -95,19 +155,25 @@ with col2:
                     approved_items.append(item)
             
             if st.button("🚀 Approve & Add to Cart"):
-                # Update state and resume
-                asyncio.run(run_agent({"approved_cart": approved_items}, "update_state"))
+                # Update state with approved cart and fulfillment method
+                asyncio.run(run_agent({
+                    "approved_cart": approved_items,
+                    "fulfillment_method": st.session_state.get("modality", "PICKUP")
+                }, "update_state"))
                 
                 with st.spinner("Adding items to cart..."):
                     asyncio.run(run_agent(None, "invoke"))
                     st.success("Items added to Kroger Cart!")
+                    st.markdown("[🔗 View your Kroger Cart](https://www.kroger.com/cart)")
                     st.rerun()
         
         order_result = state.values.get("order_result")
         if order_result:
             st.subheader("Order Summary")
+            st.markdown("[🔗 Open Kroger Cart](https://www.kroger.com/cart)")
             for item in order_result.get("items", []):
                 icon = "✅" if item['status'] == "added" else "❌"
-                st.write(f"{icon} {item['item']} - {item.get('product', item['status'])}")
+                err = f" ({item['error']})" if 'error' in item else ""
+                st.write(f"{icon} {item['item']} - {item.get('product', item['status'])}{err}")
     else:
         st.write("Start a conversation to see items here.")
