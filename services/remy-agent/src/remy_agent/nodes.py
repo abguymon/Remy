@@ -209,6 +209,15 @@ async def execute_order_node(state: AgentState) -> Dict[str, Any]:
         if search_res and not search_res.isError:
             try:
                 search_data = json.loads(search_res.content[0].text)
+                
+                if not search_data.get("success"):
+                    order_results.append({
+                        "item": query, 
+                        "status": "error", 
+                        "error": search_data.get("error", search_data.get("message", "Unknown search error"))
+                    })
+                    continue
+
                 # Handle both list (old behavior) and dict (new behavior)
                 if isinstance(search_data, list):
                     products = search_data
