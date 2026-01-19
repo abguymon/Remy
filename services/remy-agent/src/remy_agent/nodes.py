@@ -189,8 +189,23 @@ async def execute_order_node(state: AgentState) -> Dict[str, Any]:
     
     for item in approved_cart:
         query = item['original']
+        
+        # Use LLM to clean up the search term
+        clean_prompt = f"""
+        Extract the main product name for grocery search from this ingredient line: "{query}".
+        Return ONLY the product name, nothing else. Remove quantities, units, and preparation instructions.
+        Examples: 
+        "1 medium yellow onion, diced" -> "yellow onion"
+        "2 (14oz) cans crushed tomatoes" -> "crushed tomatoes"
+        """
+        try:
+            response = await llm.ainvoke([HumanMessage(content=clean_prompt)])
+            search_term = response.content.strip().replace('"', '')
+        except:
+            search_term = query
+
         # 1. Search Product
-        search_res = await call_mcp_tool(KROGER_MCP_URL, "search_products", {"search_term": query, "limit": 1})
+        search_res = await call_mcp_tool(KROGER_MCP_URL, "search_products", {"search_term": search_term, "limit": 1})
         if search_res and not search_res.isError:
             try:
                 search_data = json.loads(search_res.content[0].text)
