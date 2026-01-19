@@ -199,11 +199,31 @@ async def execute_order_node(state: AgentState) -> Dict[str, Any]:
                     
                     # 2. Add to Cart
                     add_res = await call_mcp_tool(KROGER_MCP_URL, "add_items_to_cart", {"product_id": upc, "quantity": 1})
-                    order_results.append({
+                    
+                    status = "failed"
+                    error_details = None
+                    
+                    if add_res and not add_res.isError:
+                        try:
+                            if add_res.content:
+                                res_data = json.loads(add_res.content[0].text)
+                                if res_data.get("success"):
+                                    status = "added"
+                                else:
+                                    status = "failed"
+                                    error_details = res_data.get("error")
+                        except:
+                            status = "added" # Assume success if parsing fails but execution was OK
+
+                    result_item = {
                         "item": query,
                         "product": product['description'],
-                        "status": "added" if (add_res and not add_res.isError) else "failed"
-                    })
+                        "status": status
+                    }
+                    if error_details:
+                        result_item["error"] = error_details
+                        
+                    order_results.append(result_item)
                 else:
                     order_results.append({"item": query, "status": "not_found"})
             except Exception as e:
