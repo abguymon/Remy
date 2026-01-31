@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict
+from typing import Any
 
 logger = logging.getLogger("mealie-mcp")
 
@@ -7,7 +7,7 @@ logger = logging.getLogger("mealie-mcp")
 class GroupMixin:
     """Mixin class for group-related API endpoints"""
 
-    def get_current_group(self) -> Dict[str, Any]:
+    def get_current_group(self) -> dict[str, Any]:
         """Get information about the current user's group.
 
         Returns:

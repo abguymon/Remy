@@ -2,21 +2,19 @@
 Shared utilities and client management for Kroger MCP server
 """
 
-import os
 import json
-from typing import Optional, Dict, Any
-from dotenv import load_dotenv
+import os
 
 from kroger_api.kroger_api import KrogerAPI
-from kroger_api.utils.env import load_and_validate_env, get_zip_code
 from kroger_api.token_storage import load_token
+from kroger_api.utils.env import get_zip_code, load_and_validate_env
 
 # Load environment variables
 # load_dotenv()
 
 # Global state for clients and preferred location
-_authenticated_client: Optional[KrogerAPI] = None
-_client_credentials_client: Optional[KrogerAPI] = None
+_authenticated_client: KrogerAPI | None = None
+_client_credentials_client: KrogerAPI | None = None
 
 # JSON files for configuration storage (use data/ directory for persistence)
 DATA_DIR = "data"
@@ -31,7 +29,7 @@ def _ensure_data_dir():
 def _save_token(token_file: str, token_info: dict) -> None:
     """Save token to file"""
     _ensure_data_dir()
-    with open(token_file, 'w') as f:
+    with open(token_file, "w") as f:
         json.dump(token_info, f, indent=2)
 
 
@@ -52,19 +50,19 @@ def get_client_credentials_client() -> KrogerAPI:
         # Try to load existing token first (use data/ directory for persistence)
         token_file = f"{DATA_DIR}/.kroger_token_client_product.compact.json"
         token_info = load_token(token_file)
-        
+
         if token_info:
             # Test if the token is still valid
             _client_credentials_client.client.token_info = token_info
             if _client_credentials_client.test_current_token():
                 # Token is valid, use it
                 return _client_credentials_client
-        
+
         # Token is invalid or not found, get a new one
         token_info = _client_credentials_client.authorization.get_token_with_client_credentials("product.compact")
         return _client_credentials_client
     except Exception as e:
-        raise Exception(f"Failed to get client credentials: {str(e)}")
+        raise Exception(f"Failed to get client credentials: {str(e)}") from e
 
 
 def get_authenticated_client() -> KrogerAPI:
@@ -97,22 +95,25 @@ def get_authenticated_client() -> KrogerAPI:
         token_file = f"{DATA_DIR}/.kroger_token_user.json"
         print(f"Looking for token file at: {token_file}", flush=True)
         token_info = load_token(token_file)
-        print(f"Loaded token info: {token_info is not None}, has refresh: {'refresh_token' in token_info if token_info else 'N/A'}", flush=True)
+        print(
+            f"Loaded token info: {token_info is not None}, has refresh: {'refresh_token' in token_info if token_info else 'N/A'}",
+            flush=True,
+        )
 
         if token_info:
             # Create a new client with the loaded token
             _authenticated_client = KrogerAPI()
             _authenticated_client.client.token_info = token_info
             _authenticated_client.client.token_file = token_file
-            
+
             if _authenticated_client.test_current_token():
                 # Token is valid, use it
                 return _authenticated_client
-            
+
             # Token is invalid, try to refresh it
             if "refresh_token" in token_info:
                 try:
-                    print(f"Attempting to refresh token...")
+                    print("Attempting to refresh token...")
                     new_token_info = _authenticated_client.authorization.refresh_token(token_info["refresh_token"])
                     # Save the refreshed token to file
                     if new_token_info:
@@ -125,7 +126,7 @@ def get_authenticated_client() -> KrogerAPI:
                     # Refresh failed, need to re-authenticate
                     print(f"Token refresh failed: {e}")
                     _authenticated_client = None
-        
+
         # No valid token available, need user-initiated authentication
         raise Exception(
             "Authentication required. Please use the start_authentication tool to begin the OAuth flow, "
@@ -137,7 +138,7 @@ def get_authenticated_client() -> KrogerAPI:
             raise
         else:
             # Other unexpected errors
-            raise Exception(f"Authentication failed: {str(e)}")
+            raise Exception(f"Authentication failed: {str(e)}") from e
 
 
 def invalidate_authenticated_client():
@@ -156,7 +157,7 @@ def _load_preferences() -> dict:
     """Load preferences from file"""
     try:
         if os.path.exists(PREFERENCES_FILE):
-            with open(PREFERENCES_FILE, 'r') as f:
+            with open(PREFERENCES_FILE) as f:
                 return json.load(f)
     except Exception as e:
         print(f"Warning: Could not load preferences: {e}")
@@ -167,13 +168,13 @@ def _save_preferences(preferences: dict) -> None:
     """Save preferences to file"""
     try:
         os.makedirs(DATA_DIR, exist_ok=True)
-        with open(PREFERENCES_FILE, 'w') as f:
+        with open(PREFERENCES_FILE, "w") as f:
             json.dump(preferences, f, indent=2)
     except Exception as e:
         print(f"Warning: Could not save preferences: {e}")
 
 
-def get_preferred_location_id() -> Optional[str]:
+def get_preferred_location_id() -> str | None:
     """Get the current preferred location ID from preferences file"""
     preferences = _load_preferences()
     return preferences.get("preferred_location_id")
@@ -186,7 +187,7 @@ def set_preferred_location_id(location_id: str) -> None:
     _save_preferences(preferences)
 
 
-def format_currency(value: Optional[float]) -> str:
+def format_currency(value: float | None) -> str:
     """Format a value as currency"""
     if value is None:
         return "N/A"

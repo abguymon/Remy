@@ -1,7 +1,7 @@
 import json
 import logging
 import traceback
-from typing import Any, Dict
+from typing import Any
 
 import httpx
 from httpx import ConnectError, HTTPStatusError, ReadTimeout
@@ -20,7 +20,6 @@ class MealieApiError(Exception):
 
 
 class MealieClient:
-
     def __init__(self, base_url: str, api_key: str):
         if not base_url:
             raise ValueError("Base URL cannot be empty")
@@ -44,19 +43,15 @@ class MealieClient:
         except ConnectError as e:
             error_msg = f"Failed to connect to Mealie API at {base_url}: {str(e)}"
             logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
+            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
             raise ConnectionError(error_msg) from e
         except Exception as e:
             error_msg = f"Error initializing Mealie client: {str(e)}"
             logger.error({"message": error_msg})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
+            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
             raise
 
-    def _handle_request(self, method: str, url: str, **kwargs) -> Dict[str, Any] | str:
+    def _handle_request(self, method: str, url: str, **kwargs) -> dict[str, Any] | str:
         """Common request handler with error handling for all API calls."""
         try:
             logger.debug(
@@ -69,27 +64,21 @@ class MealieClient:
             )
 
             if "params" in kwargs:
-                logger.debug(
-                    {"message": "Request parameters", "params": kwargs["params"]}
-                )
+                logger.debug({"message": "Request parameters", "params": kwargs["params"]})
             if "json" in kwargs:
                 logger.debug({"message": "Request payload", "payload": kwargs["json"]})
 
             response = self._client.request(method, url, **kwargs)
             response.raise_for_status()  # Raise an exception for 4XX/5XX responses
 
-            logger.debug(
-                {"message": "Request successful", "status_code": response.status_code}
-            )
+            logger.debug({"message": "Request successful", "status_code": response.status_code})
             # Log the response content at debug level
             try:
                 response_data = response.json()
                 logger.debug({"message": "Response content", "data": response_data})
                 return response_data
             except json.JSONDecodeError:
-                logger.debug(
-                    {"message": "Response content (non-JSON)", "content": response.text}
-                )
+                logger.debug({"message": "Response content (non-JSON)", "content": response.text})
                 return response.text
 
         except HTTPStatusError as e:
@@ -112,35 +101,23 @@ class MealieClient:
                     "error_detail": error_detail,
                 }
             )
-            logger.debug(
-                {"message": "Failed Request body", "content": e.request.content}
-            )
+            logger.debug({"message": "Failed Request body", "content": e.request.content})
             raise MealieApiError(status_code, error_msg, e.response.text) from e
 
         except ReadTimeout:
             error_msg = f"Request timeout for {method} {url}"
             logger.error({"message": error_msg, "method": method, "url": url})
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
-            raise TimeoutError(error_msg)
+            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
+            raise TimeoutError(error_msg) from None
 
         except ConnectError as e:
             error_msg = f"Connection error for {method} {url}: {str(e)}"
-            logger.error(
-                {"message": error_msg, "method": method, "url": url, "error": str(e)}
-            )
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
+            logger.error({"message": error_msg, "method": method, "url": url, "error": str(e)})
+            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
             raise ConnectionError(error_msg) from e
 
         except Exception as e:
             error_msg = f"Unexpected error for {method} {url}: {str(e)}"
-            logger.error(
-                {"message": error_msg, "method": method, "url": url, "error": str(e)}
-            )
-            logger.debug(
-                {"message": "Error traceback", "traceback": traceback.format_exc()}
-            )
+            logger.error({"message": error_msg, "method": method, "url": url, "error": str(e)})
+            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
             raise

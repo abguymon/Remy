@@ -1,13 +1,15 @@
-import streamlit as st
-import os
-import uuid
 import asyncio
 import json
+import os
+import uuid
+
+import streamlit as st
 import yaml
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-from mcp.client.sse import sse_client
 from mcp.client.session import ClientSession
+from mcp.client.sse import sse_client
+
 from remy_agent.graph import get_workflow
 
 # Config file paths
@@ -19,7 +21,7 @@ USER_SETTINGS_PATH = "user_settings.yaml"
 def load_yaml_config(path, default):
     """Load a YAML config file."""
     if os.path.exists(path):
-        with open(path, "r") as f:
+        with open(path) as f:
             return yaml.safe_load(f) or default
     return default
 
@@ -32,16 +34,14 @@ def save_yaml_config(path, data):
 
 def load_user_settings():
     """Load user settings."""
-    default = {
-        "store": {"location_id": None, "name": None, "zip_code": ""},
-        "fulfillment": "PICKUP"
-    }
+    default = {"store": {"location_id": None, "name": None, "zip_code": ""}, "fulfillment": "PICKUP"}
     return load_yaml_config(USER_SETTINGS_PATH, default)
 
 
 def save_user_settings(settings):
     """Save user settings."""
     save_yaml_config(USER_SETTINGS_PATH, settings)
+
 
 # Page config
 st.set_page_config(page_title="Remy - AI Grocery Agent", layout="wide")
@@ -57,13 +57,11 @@ KROGER_MCP_URL = os.getenv("KROGER_MCP_URL", "http://kroger-mcp:8000/sse")
 
 st.title("Remy: Your Personal Grocery Agent")
 
+
 # Helper to run the graph asynchronously
 async def run_agent(input_state=None, command="invoke"):
     async with AsyncSqliteSaver.from_conn_string(DB_PATH) as checkpointer:
-        app = workflow.compile(
-            checkpointer=checkpointer,
-            interrupt_before=["fetch_selected_recipes", "execute_order"]
-        )
+        app = workflow.compile(checkpointer=checkpointer, interrupt_before=["fetch_selected_recipes", "execute_order"])
         config = {"configurable": {"thread_id": st.session_state.thread_id}}
 
         if command == "invoke":
@@ -72,6 +70,7 @@ async def run_agent(input_state=None, command="invoke"):
             return await app.aget_state(config)
         elif command == "update_state":
             return await app.aupdate_state(config, input_state)
+
 
 # Load user settings
 user_settings = load_user_settings()
@@ -82,16 +81,18 @@ st.session_state.modality = user_settings.get("fulfillment", "PICKUP")
 
 # Set preferred location in Kroger MCP on startup
 if st.session_state.preferred_store_id and "kroger_store_set" not in st.session_state:
+
     async def init_store():
         try:
             async with sse_client(KROGER_MCP_URL) as (read, write):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
-                    await session.call_tool("set_preferred_location", {
-                        "location_id": st.session_state.preferred_store_id
-                    })
-        except:
+                    await session.call_tool(
+                        "set_preferred_location", {"location_id": st.session_state.preferred_store_id}
+                    )
+        except Exception:
             pass
+
     asyncio.run(init_store())
     st.session_state.kroger_store_set = True
 
@@ -110,6 +111,7 @@ with st.sidebar:
     # Kroger Authentication
     if "auth_url" not in st.session_state:
         if st.button("Login to Kroger"):
+
             async def start_auth():
                 try:
                     async with sse_client(KROGER_MCP_URL) as (read, write):
@@ -133,6 +135,7 @@ with st.sidebar:
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Complete"):
+
                 async def finish_auth(url):
                     try:
                         async with sse_client(KROGER_MCP_URL) as (read, write):
@@ -141,7 +144,7 @@ with st.sidebar:
                                 res = await session.call_tool("complete_authentication", {"redirect_url": url})
                                 if res and not res.isError:
                                     return json.loads(res.content[0].text)
-                    except:
+                    except Exception:
                         pass
                     return None
 
@@ -166,6 +169,7 @@ with st.sidebar:
         settings_zip = st.text_input("Zip Code", value=store_settings.get("zip_code", ""), key="settings_zip")
 
         if st.button("Search Stores"):
+
             async def fetch_stores():
                 try:
                     async with sse_client(KROGER_MCP_URL) as (read, write):
@@ -192,7 +196,7 @@ with st.sidebar:
                 user_settings["store"] = {
                     "location_id": store["location_id"],
                     "name": f"{store['name']} - {store['address']['street']}",
-                    "zip_code": settings_zip
+                    "zip_code": settings_zip,
                 }
                 save_user_settings(user_settings)
 
@@ -203,8 +207,9 @@ with st.sidebar:
                             async with ClientSession(read, write) as session:
                                 await session.initialize()
                                 await session.call_tool("set_preferred_location", {"location_id": store["location_id"]})
-                    except:
+                    except Exception:
                         pass
+
                 asyncio.run(update_store())
 
                 st.success(f"Saved store: {store['name']}")
@@ -256,10 +261,7 @@ with st.sidebar:
         bypass_staples = pantry_config.get("bypass_staples", [])
 
         pantry_text = st.text_area(
-            "One item per line:",
-            value="\n".join(bypass_staples),
-            height=150,
-            key="pantry_items_text"
+            "One item per line:", value="\n".join(bypass_staples), height=150, key="pantry_items_text"
         )
 
         if st.button("Save Pantry Items"):
@@ -308,8 +310,8 @@ with col1:
             option_labels = []
 
             # Mealie options first
-            mealie_options = [r for r in recipe_options if r['source'] == 'mealie']
-            web_options = [r for r in recipe_options if r['source'] == 'web']
+            mealie_options = [r for r in recipe_options if r["source"] == "mealie"]
+            web_options = [r for r in recipe_options if r["source"] == "web"]
 
             if mealie_options:
                 st.markdown("**From Your Mealie Library:**")
@@ -330,28 +332,25 @@ with col1:
 
             # Radio selection
             if all_options:
+
                 def format_option(i):
                     opt = all_options[i]
-                    if opt['source'] == 'mealie':
+                    if opt["source"] == "mealie":
                         return f"{opt['name']} (Mealie)"
                     else:
                         # Extract domain from URL
                         from urllib.parse import urlparse
-                        domain = urlparse(opt['url']).netloc.replace('www.', '')
+
+                        domain = urlparse(opt["url"]).netloc.replace("www.", "")
                         return f"{opt['name']} ({domain})"
 
                 selected_index = st.radio(
-                    "Choose a recipe:",
-                    range(len(all_options)),
-                    format_func=format_option,
-                    index=0
+                    "Choose a recipe:", range(len(all_options)), format_func=format_option, index=0
                 )
 
                 if st.button("Use This Recipe"):
                     selected_recipe = all_options[selected_index]
-                    asyncio.run(run_agent({
-                        "selected_recipe_options": [selected_recipe]
-                    }, "update_state"))
+                    asyncio.run(run_agent({"selected_recipe_options": [selected_recipe]}, "update_state"))
 
                     with st.spinner("Fetching recipe details..."):
                         asyncio.run(run_agent(None, "invoke"))
@@ -389,7 +388,7 @@ with col2:
     if pending_cart:
         st.write("**Items to order:**")
         for i, item in enumerate(pending_cart):
-            checked = st.checkbox(item['original'], value=True, key=f"item_{i}")
+            checked = st.checkbox(item["original"], value=True, key=f"item_{i}")
             if checked:
                 approved_items.append(item)
 
@@ -397,18 +396,23 @@ with col2:
     if pantry_items:
         with st.expander("Pantry Items (check to order anyway)", expanded=False):
             for i, item in enumerate(pantry_items):
-                checked = st.checkbox(item['original'], value=False, key=f"pantry_{i}")
+                checked = st.checkbox(item["original"], value=False, key=f"pantry_{i}")
                 if checked:
                     approved_items.append(item)
 
     # Add to cart button
     if pending_cart or pantry_items:
         if st.button("Add to Cart", disabled=len(approved_items) == 0):
-            asyncio.run(run_agent({
-                "approved_cart": approved_items,
-                "fulfillment_method": st.session_state.get("modality", "PICKUP"),
-                "preferred_store_id": st.session_state.get("preferred_store_id")
-            }, "update_state"))
+            asyncio.run(
+                run_agent(
+                    {
+                        "approved_cart": approved_items,
+                        "fulfillment_method": st.session_state.get("modality", "PICKUP"),
+                        "preferred_store_id": st.session_state.get("preferred_store_id"),
+                    },
+                    "update_state",
+                )
+            )
 
             with st.spinner("Adding items to cart..."):
                 asyncio.run(run_agent(None, "invoke"))
@@ -421,18 +425,18 @@ with col2:
         st.subheader("Order Summary")
         st.markdown("[Open Kroger Cart](https://www.kroger.com/cart)")
         for item in order_result.get("items", []):
-            qty = item.get('quantity', 1)
+            qty = item.get("quantity", 1)
             qty_str = f"x{qty} " if qty > 1 else ""
 
-            if item['status'] == "added":
+            if item["status"] == "added":
                 icon = "+"
-            elif item['status'] == "unavailable":
+            elif item["status"] == "unavailable":
                 icon = "?"
             else:
                 icon = "x"
 
-            product_info = item.get('product', item['status'])
-            err = f" - {item['error']}" if 'error' in item else ""
+            product_info = item.get("product", item["status"])
+            err = f" - {item['error']}" if "error" in item else ""
             st.write(f"{icon} {qty_str}{item['item']} -> {product_info}{err}")
 
     # Empty state

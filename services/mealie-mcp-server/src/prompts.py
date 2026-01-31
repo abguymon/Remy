@@ -48,7 +48,9 @@ You have access to a Mealie recipe database with various recipes. You can search
 """
 
         # User message that initiates the conversation
-        user_content = "I need help creating a balanced meal plan for the next week that includes breakfast, lunch, and dinner."
+        user_content = (
+            "I need help creating a balanced meal plan for the next week that includes breakfast, lunch, and dinner."
+        )
 
         if preferences:
             user_content += f" My preferences are: {preferences}"

@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from utils import format_api_params
 
@@ -11,18 +11,18 @@ class RecipeMixin:
 
     def get_recipes(
         self,
-        search: Optional[str] = None,
-        order_by: Optional[str] = None,
-        order_by_null_position: Optional[str] = None,
-        order_direction: Optional[str] = "desc",
-        query_filter: Optional[str] = None,
-        pagination_seed: Optional[str] = None,
-        page: Optional[int] = None,
-        per_page: Optional[int] = None,
-        categories: Optional[List[str]] = None,
-        tags: Optional[List[str]] = None,
-        tools: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        search: str | None = None,
+        order_by: str | None = None,
+        order_by_null_position: str | None = None,
+        order_direction: str | None = "desc",
+        query_filter: str | None = None,
+        pagination_seed: str | None = None,
+        page: int | None = None,
+        per_page: int | None = None,
+        categories: list[str] | None = None,
+        tags: list[str] | None = None,
+        tools: list[str] | None = None,
+    ) -> dict[str, Any]:
         """Provides paginated list of recipes
 
         Args:
@@ -61,7 +61,7 @@ class RecipeMixin:
         logger.info({"message": "Retrieving recipes", "parameters": params})
         return self._handle_request("GET", "/api/recipes", params=params)
 
-    def get_recipe(self, slug: str) -> Dict[str, Any]:
+    def get_recipe(self, slug: str) -> dict[str, Any]:
         """Retrieve a specific recipe by its slug
 
         Args:
@@ -76,7 +76,7 @@ class RecipeMixin:
         logger.info({"message": "Retrieving recipe", "slug": slug})
         return self._handle_request("GET", f"/api/recipes/{slug}")
 
-    def update_recipe(self, slug: str, recipe_data: Dict[str, Any]) -> Dict[str, Any]:
+    def update_recipe(self, slug: str, recipe_data: dict[str, Any]) -> dict[str, Any]:
         """Update a specific recipe by its slug
 
         Args:
@@ -117,8 +117,4 @@ class RecipeMixin:
             Slug of the newly created recipe
         """
         logger.info({"message": "Creating recipe from URL", "url": url})
-        return self._handle_request(
-            "POST",
-            "/api/recipes/create/url",
-            json={"url": url, "includeTags": include_tags}
-        )
+        return self._handle_request("POST", "/api/recipes/create/url", json={"url": url, "includeTags": include_tags})

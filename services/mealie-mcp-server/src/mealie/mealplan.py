@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from utils import format_api_params
 
@@ -11,11 +11,11 @@ class MealplanMixin:
 
     def get_mealplans(
         self,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        page: Optional[int] = None,
-        per_page: Optional[int] = None,
-    ) -> Dict[str, Any]:
+        start_date: str | None = None,
+        end_date: str | None = None,
+        page: int | None = None,
+        per_page: int | None = None,
+    ) -> dict[str, Any]:
         """Get all mealplans for the current household with pagination.
 
         Args:
@@ -40,18 +40,16 @@ class MealplanMixin:
         params = format_api_params(param_dict)
 
         logger.info({"message": "Retrieving mealplans", "parameters": params})
-        response = self._handle_request(
-            "GET", "/api/households/mealplans", params=params
-        )
+        response = self._handle_request("GET", "/api/households/mealplans", params=params)
         return response
 
     def create_mealplan(
         self,
         date: str,
-        recipe_id: Optional[str] = None,
-        title: Optional[str] = None,
+        recipe_id: str | None = None,
+        title: str | None = None,
         entry_type: str = "breakfast",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a new mealplan entry.
 
         Args:
@@ -92,7 +90,7 @@ class MealplanMixin:
         )
         return self._handle_request("POST", "/api/households/mealplans", json=payload)
 
-    def get_todays_mealplan(self) -> List[Dict[str, Any]]:
+    def get_todays_mealplan(self) -> list[dict[str, Any]]:
         """Get the mealplan entries for today.
 
         Returns:

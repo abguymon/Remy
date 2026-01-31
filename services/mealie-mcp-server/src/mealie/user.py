@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict
+from typing import Any
 
 logger = logging.getLogger("mealie-mcp")
 
@@ -7,7 +7,7 @@ logger = logging.getLogger("mealie-mcp")
 class UserMixin:
     """Mixin class for user-related API endpoints"""
 
-    def get_current_user(self) -> Dict[str, Any]:
+    def get_current_user(self) -> dict[str, Any]:
         """Get information about the currently logged in user.
 
         Returns:

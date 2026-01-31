@@ -16,20 +16,13 @@ Environment Variables Required:
 - KROGER_USER_ZIP_CODE: Default zip code for location searches (optional)
 """
 
-import sys
 from fastmcp import FastMCP
-
-# Import all tool modules
-from .tools import location_tools
-from .tools import product_tools
-from .tools import cart_tools
-from .tools import info_tools
-from .tools import profile_tools
-from .tools import utility_tools
-from .tools import auth_tools
 
 # Import prompts
 from . import prompts
+
+# Import all tool modules
+from .tools import auth_tools, cart_tools, info_tools, location_tools, product_tools, profile_tools, utility_tools
 
 
 def create_server() -> FastMCP:
@@ -39,14 +32,14 @@ def create_server() -> FastMCP:
         name="Kroger API Server",
         instructions="""
         This MCP server provides access to Kroger's API for grocery shopping functionality.
-        
+
         Key Features:
         - Search and manage store locations
         - Find and search products
         - Add items to shopping cart with local tracking
         - Access chain and department information
         - User profile management
-        
+
         Common workflows:
         1. Set a preferred location with set_preferred_location
         2. Search for products with search_products
@@ -54,18 +47,18 @@ def create_server() -> FastMCP:
         4. Use bulk_add_to_cart for multiple items at once
         5. View current cart with view_current_cart
         6. Mark order as placed with mark_order_placed
-        
+
         Authentication Flow:
         1. Use start_authentication to get an authorization URL
         2. Open the URL in your browser and authorize the application
         3. Copy the full redirect URL from your browser
         4. Use complete_authentication with the redirect URL to finish the process
-        
+
         Cart Tracking:
         This server maintains a local record of items added to your cart since the Kroger API
         doesn't provide cart viewing functionality. When you place an order through the Kroger
         website/app, use mark_order_placed to move the current cart to order history.
-        """
+        """,
     )
 
     # Register all tools from the modules
@@ -76,10 +69,10 @@ def create_server() -> FastMCP:
     profile_tools.register_tools(mcp)
     utility_tools.register_tools(mcp)
     auth_tools.register_tools(mcp)
-    
+
     # Register prompts
     prompts.register_prompts(mcp)
-    
+
     return mcp
 
 

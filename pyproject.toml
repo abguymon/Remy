@@ -1,0 +1,32 @@
+[project]
+name = "remy"
+version = "0.1.0"
+description = "AI-powered grocery planning agent"
+requires-python = ">=3.12"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # do not perform function calls in argument defaults
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# Note: ty type checking is challenging in this mono-repo because each service
+# has its own dependencies installed in Docker containers. To run ty locally,
+# you would need to install all service dependencies in a local venv.
