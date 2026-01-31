@@ -3,3 +3,7 @@
 __pycache__/
 *.pyc
 .DS_Store
+
+# User-specific settings (copy from .template files)
+services/remy-agent/user_settings.yaml
+services/remy-agent/uv.lock

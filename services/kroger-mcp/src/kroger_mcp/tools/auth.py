@@ -6,6 +6,7 @@ where the browser-based authentication flow needs to be handled through user int
 rather than automated browser opening.
 """
 import os
+import json
 from typing import Dict, Any, Optional
 from fastmcp import Context
 from dotenv import load_dotenv
@@ -16,11 +17,22 @@ from kroger_api.utils import generate_pkce_parameters
 from kroger_api import KrogerAPI
 
 # Load environment variables
-load_dotenv()
+# load_dotenv()
 
 # Store PKCE parameters between steps
 _pkce_params = None
 _auth_state = None
+
+# Token storage location (use data/ directory for persistence)
+DATA_DIR = "data"
+USER_TOKEN_FILE = f"{DATA_DIR}/.kroger_token_user.json"
+
+
+def _save_token(token_info: Dict[str, Any]) -> None:
+    """Save token to persistent storage"""
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(USER_TOKEN_FILE, 'w') as f:
+        json.dump(token_info, f, indent=2)
 
 def register_auth_tools(mcp):
     """Register authentication-specific tools with the FastMCP server"""
@@ -162,13 +174,16 @@ def register_auth_tools(mcp):
                 auth_code,
                 code_verifier=_pkce_params["code_verifier"]
             )
-            
+
+            # Save token to persistent storage
+            _save_token(token_info)
+
             # Clear PKCE parameters and state after successful exchange
             _pkce_params = None
             _auth_state = None
-            
+
             if ctx:
-                await ctx.info(f"Authentication successful!")
+                await ctx.info(f"Authentication successful! Token saved to {USER_TOKEN_FILE}")
             
             # Return success response
             return {

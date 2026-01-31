@@ -10,9 +10,10 @@ from fastmcp import Context
 from .shared import get_authenticated_client
 
 
-# Cart storage file
-CART_FILE = "kroger_cart.json"
-ORDER_HISTORY_FILE = "kroger_order_history.json"
+# Cart storage files (use data/ directory for persistence)
+DATA_DIR = "data"
+CART_FILE = f"{DATA_DIR}/kroger_cart.json"
+ORDER_HISTORY_FILE = f"{DATA_DIR}/kroger_order_history.json"
 
 
 def _load_cart_data() -> Dict[str, Any]:
@@ -29,6 +30,7 @@ def _load_cart_data() -> Dict[str, Any]:
 def _save_cart_data(cart_data: Dict[str, Any]) -> None:
     """Save cart data to file"""
     try:
+        os.makedirs(DATA_DIR, exist_ok=True)
         with open(CART_FILE, 'w') as f:
             json.dump(cart_data, f, indent=2)
     except Exception as e:
@@ -49,6 +51,7 @@ def _load_order_history() -> List[Dict[str, Any]]:
 def _save_order_history(history: List[Dict[str, Any]]) -> None:
     """Save order history to file"""
     try:
+        os.makedirs(DATA_DIR, exist_ok=True)
         with open(ORDER_HISTORY_FILE, 'w') as f:
             json.dump(history, f, indent=2)
     except Exception as e:
@@ -117,11 +120,14 @@ def register_tools(mcp):
             Dictionary confirming the item was added to cart
         """
         try:
+            print(f"[cart] add_items_to_cart called: {product_id} x{quantity} {modality}", flush=True)
             if ctx:
                 await ctx.info(f"Adding {quantity}x {product_id} to cart with {modality} modality")
-            
+
             # Get authenticated client
+            print("[cart] Getting authenticated client...", flush=True)
             client = get_authenticated_client()
+            print("[cart] Got client", flush=True)
             
             # Format the item for the API
             cart_item = {
@@ -135,8 +141,10 @@ def register_tools(mcp):
             
             # Add the item to the actual Kroger cart
             # Note: add_to_cart returns None on success, raises exception on failure
+            print(f"[cart] Calling Kroger API add_to_cart...", flush=True)
             client.cart.add_to_cart([cart_item])
-            
+            print(f"[cart] Kroger API call succeeded", flush=True)
+
             if ctx:
                 await ctx.info("Successfully added item to Kroger cart")
             

@@ -1,0 +1,9 @@
+# User preferences for Remy
+# Copy this file to user_settings.yaml and customize
+
+store:
+  location_id: null  # Set via UI or find your store at kroger.com
+  name: null
+  zip_code: ""
+
+fulfillment: "PICKUP"  # PICKUP or DELIVERY

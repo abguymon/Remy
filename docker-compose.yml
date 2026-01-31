@@ -43,6 +43,8 @@ services:
       KROGER_CLIENT_ID: ${KROGER_CLIENT_ID}
       KROGER_CLIENT_SECRET: ${KROGER_CLIENT_SECRET}
       KROGER_REDIRECT_URI: ${KROGER_REDIRECT_URI}
+    volumes:
+      - kroger-data:/app/data
     ports:
       - "8001:8000" # Expose on a different port to avoid conflict with mealie-mcp-server
     networks:
@@ -56,6 +58,9 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       MEALIE_MCP_URL: http://mealie-mcp-server:8000/sse
       KROGER_MCP_URL: http://kroger-mcp:8000/sse
+      MEALIE_EXTERNAL_URL: http://localhost:9925
+    volumes:
+      - remy-data:/app/data
     ports:
       - "8501:8501"
     depends_on:
@@ -66,3 +71,5 @@ services:
 
 volumes:
   mealie-data:
+  kroger-data:
+  remy-data:

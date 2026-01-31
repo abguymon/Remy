@@ -105,3 +105,20 @@ class RecipeMixin:
         """
         logger.info({"message": "Creating new recipe", "name": name})
         return self._handle_request("POST", "/api/recipes", json={"name": name})
+
+    def create_recipe_from_url(self, url: str, include_tags: bool = False) -> str:
+        """Create a new recipe by scraping a URL
+
+        Args:
+            url: The URL of the recipe to scrape
+            include_tags: Whether to include tags from the scraped recipe
+
+        Returns:
+            Slug of the newly created recipe
+        """
+        logger.info({"message": "Creating recipe from URL", "url": url})
+        return self._handle_request(
+            "POST",
+            "/api/recipes/create/url",
+            json={"url": url, "includeTags": include_tags}
+        )

@@ -155,6 +155,30 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher) -> None:
             raise ToolError(error_msg)
 
     @mcp.tool()
+    def create_recipe_from_url(url: str, include_tags: bool = False) -> Dict[str, Any]:
+        """Create a new recipe by importing from a URL. Mealie will scrape the recipe
+        data from the provided URL and create a new recipe in the database.
+
+        Args:
+            url: The URL of the recipe page to scrape (e.g., "https://www.allrecipes.com/recipe/123")
+            include_tags: Whether to include tags parsed from the recipe page (default: False)
+
+        Returns:
+            Dict[str, Any]: The slug of the newly created recipe.
+        """
+        try:
+            logger.info({"message": "Creating recipe from URL", "url": url})
+            slug = mealie.create_recipe_from_url(url, include_tags)
+            return {"slug": slug, "success": True}
+        except Exception as e:
+            error_msg = f"Error creating recipe from URL '{url}': {str(e)}"
+            logger.error({"message": error_msg})
+            logger.debug(
+                {"message": "Error traceback", "traceback": traceback.format_exc()}
+            )
+            raise ToolError(error_msg)
+
+    @mcp.tool()
     def update_recipe(
         slug: str,
         ingredients: List[str],
