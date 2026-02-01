@@ -1,10 +1,85 @@
 # Sane defaults for a backend developer's pantry
 bypass_staples:
+  # Basics
   - salt
   - black pepper
+  - pepper
   - water
   - ice
+
+  # Oils
   - olive oil
+  - vegetable oil
+  - canola oil
+  - sesame oil
+  - cooking spray
+
+  # Baking
   - flour
+  - all-purpose flour
   - baking soda
+  - baking powder
   - cornstarch
+  - sugar
+  - brown sugar
+  - powdered sugar
+  - vanilla extract
+  - yeast
+
+  # Dried herbs & spices
+  - oregano
+  - basil
+  - thyme
+  - rosemary
+  - bay leaf
+  - bay leaves
+  - paprika
+  - cumin
+  - chili powder
+  - cayenne
+  - cinnamon
+  - nutmeg
+  - garlic powder
+  - onion powder
+  - Italian seasoning
+  - red pepper flakes
+  - crushed red pepper
+  - turmeric
+  - coriander
+  - curry powder
+  - ginger powder
+
+  # Condiments & sauces
+  - mayo
+  - mayonnaise
+  - ketchup
+  - mustard
+  - dijon mustard
+  - soy sauce
+  - sriracha
+  - hot sauce
+  - worcestershire sauce
+  - fish sauce
+  - vinegar
+  - white vinegar
+  - apple cider vinegar
+  - balsamic vinegar
+  - red wine vinegar
+  - rice vinegar
+  - honey
+  - maple syrup
+
+  # Pantry staples
+  - rice
+  - white rice
+  - pasta
+  - garlic
+  - onion
+  - butter
+  - eggs
+  - milk
+  - chicken broth
+  - beef broth
+  - vegetable broth
+  - tomato paste
+  - breadcrumbs

@@ -15,7 +15,7 @@ class AgentState(TypedDict):
     # Node 1: Recipe Search
     target_recipe_names: list[str]  # e.g. ["Shrimp Scampi"]
     recipe_options: list[dict[str, Any]]  # Options from Mealie and web with URLs
-    # Structure: {"name": str, "source": "mealie"|"web", "url": str, "slug": str|None, "description": str}
+    # Structure: {"name": str, "source": "mealie"|"web", "url": str, "slug": str|None, "description": str, "image_url": str|None}
 
     # Node 2: Recipe Selection (after user picks from options)
     selected_recipe_options: list[dict[str, Any]]  # User's selections from recipe_options

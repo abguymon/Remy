@@ -1,8 +1,10 @@
 import asyncio
 import json
 import os
+import re
 from typing import Any
 
+import httpx
 from langchain_community.tools import DuckDuckGoSearchResults
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_openai import ChatOpenAI
@@ -38,6 +40,108 @@ def get_search_tool():
     if _search_tool is None:
         _search_tool = DuckDuckGoSearchResults(num_results=5)
     return _search_tool
+
+
+async def fetch_og_image(url: str, timeout: float = 5.0) -> str | None:
+    """Fetch og:image meta tag from a URL. Returns image URL or None."""
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml",
+    }
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=timeout, headers=headers) as client:
+            # Fetch up to 200KB - some sites have og:image late in the HTML
+            async with client.stream("GET", url) as response:
+                if response.status_code != 200:
+                    return None
+
+                content = b""
+                async for chunk in response.aiter_bytes():
+                    content += chunk
+                    # Stop once we have enough (200KB should cover most sites)
+                    if len(content) > 200000:
+                        break
+
+                html = content.decode("utf-8", errors="ignore")
+
+                # Look for og:image meta tag
+                og_match = re.search(
+                    r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']',
+                    html,
+                    re.IGNORECASE,
+                )
+                if og_match:
+                    return og_match.group(1)
+
+                # Try alternate format: content before property
+                og_match = re.search(
+                    r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']',
+                    html,
+                    re.IGNORECASE,
+                )
+                if og_match:
+                    return og_match.group(1)
+
+    except Exception as e:
+        print(f"[og:image] Failed to fetch {url}: {e}")
+    return None
+
+
+async def fetch_thumbnails_parallel(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Fetch og:image thumbnails for all results in parallel."""
+    if not results:
+        return results
+
+    urls = [r["url"] for r in results]
+    print(f"[Thumbnails] Fetching og:image for {len(urls)} URLs in parallel...")
+
+    thumbnails = await asyncio.gather(*[fetch_og_image(url) for url in urls])
+
+    for i, thumbnail in enumerate(thumbnails):
+        if thumbnail:
+            results[i]["image_url"] = thumbnail
+
+    found = sum(1 for t in thumbnails if t)
+    print(f"[Thumbnails] Found {found}/{len(urls)} og:image thumbnails")
+
+    return results
+
+
+async def filter_web_results(results: list[dict[str, Any]], recipe_name: str) -> list[dict[str, Any]]:
+    """Filter web results to remove roundups, listicles, and non-recipe pages."""
+    if not results:
+        return results
+
+    titles = [r["name"] for r in results]
+    filter_prompt = f"""I searched for "{recipe_name}" and got these results:
+{json.dumps(titles, indent=2)}
+
+Return a JSON array of titles that are ACTUAL SINGLE RECIPES (not roundups or collections).
+
+EXCLUDE:
+- Recipe roundups ("15 Best...", "20 Easy...", "10 Delicious...")
+- Listicles ("X Recipes to Try", "X Ways to Cook...")
+- Category/collection pages
+- Non-recipe content (reviews, articles about food)
+
+INCLUDE:
+- Single recipe pages ("Pesto Pasta Recipe", "Easy Chicken Tikka Masala")
+- Recipe titles without numbers at the start
+
+Return ONLY the JSON array of titles to keep. No explanation."""
+
+    try:
+        response = await get_llm().ainvoke([HumanMessage(content=filter_prompt)])
+        content = response.content.strip().replace("```json", "").replace("```", "").strip()
+        valid_titles = json.loads(content)
+        valid_titles_lower = [t.lower() for t in valid_titles]
+
+        filtered = [r for r in results if r["name"].lower() in valid_titles_lower]
+        print(f"[Web Filter] Kept {len(filtered)}/{len(results)} results after filtering roundups")
+        return filtered
+    except Exception as e:
+        print(f"[Web Filter] Error filtering results: {e}")
+        return results
 
 
 async def call_mcp_tool(url: str, tool_name: str, arguments: dict[str, Any] | None = None) -> Any:
@@ -93,6 +197,7 @@ async def search_recipes_node(state: AgentState) -> dict[str, Any]:
                     "url": url,
                     "slug": None,
                     "description": f"Import recipe from {domain}",
+                    "image_url": None,
                 }
             )
 
@@ -167,10 +272,11 @@ async def search_recipes_node(state: AgentState) -> dict[str, Any]:
 
 
 async def _search_mealie(recipe_name: str) -> list[dict[str, Any]]:
-    """Search Mealie for recipes matching the name."""
+    """Search Mealie for recipes matching the name, filtered by LLM for relevance."""
     results = []
     try:
-        search_result = await call_mcp_tool(MEALIE_MCP_URL, "get_recipes", {"search": recipe_name, "per_page": 5})
+        # Search with more results to filter down
+        search_result = await call_mcp_tool(MEALIE_MCP_URL, "get_recipes", {"search": recipe_name, "per_page": 15})
         if search_result and not search_result.isError and search_result.content:
             search_data = json.loads(search_result.content[0].text)
             recipes_list = []
@@ -179,17 +285,53 @@ async def _search_mealie(recipe_name: str) -> list[dict[str, Any]]:
             elif isinstance(search_data, dict):
                 recipes_list = search_data.get("items", [])
 
-            for recipe in recipes_list[:5]:
-                slug = recipe.get("slug", "")
-                results.append(
-                    {
-                        "name": recipe.get("name", ""),
-                        "source": "mealie",
-                        "url": f"{MEALIE_EXTERNAL_URL}/g/home/r/{slug}",
-                        "slug": slug,
-                        "description": recipe.get("description", "") or "Recipe from your Mealie library",
-                    }
-                )
+            if not recipes_list:
+                return results
+
+            # Use LLM to filter for actually relevant recipes
+            recipe_names = [r.get("name", "") for r in recipes_list]
+            filter_prompt = f"""I'm looking for recipes matching: "{recipe_name}"
+
+Here are the search results from my recipe database:
+{json.dumps(recipe_names, indent=2)}
+
+Return a JSON array of the recipe names that are ACTUALLY relevant matches for what I'm looking for.
+Only include recipes that are the same dish or very similar. Be strict - partial word matches don't count.
+
+For example:
+- If looking for "farro tomato mozzarella bake", "Coconut Fish and Tomato Bake" is NOT a match (different dish)
+- If looking for "chicken tikka masala", "Chicken Tikka Masala" IS a match
+- If looking for "pasta carbonara", "Spaghetti Carbonara" IS a match (same dish, different pasta)
+
+Return ONLY the JSON array of matching recipe names, or [] if none match. No explanation."""
+
+            response = await get_llm().ainvoke([HumanMessage(content=filter_prompt)])
+            try:
+                content = response.content.strip().replace("```json", "").replace("```", "").strip()
+                relevant_names = json.loads(content)
+                relevant_names_lower = [n.lower() for n in relevant_names]
+            except Exception:
+                # If parsing fails, fall back to returning top results
+                relevant_names_lower = [r.get("name", "").lower() for r in recipes_list[:3]]
+
+            for recipe in recipes_list:
+                if recipe.get("name", "").lower() in relevant_names_lower:
+                    slug = recipe.get("slug", "")
+                    recipe_id = recipe.get("id", "")
+                    image_name = recipe.get("image")
+                    image_url = None
+                    if image_name and recipe_id:
+                        image_url = f"{MEALIE_EXTERNAL_URL}/api/media/recipes/{recipe_id}/images/min-original.webp"
+                    results.append(
+                        {
+                            "name": recipe.get("name", ""),
+                            "source": "mealie",
+                            "url": f"{MEALIE_EXTERNAL_URL}/g/home/r/{slug}",
+                            "slug": slug,
+                            "description": recipe.get("description", "") or "Recipe from your Mealie library",
+                            "image_url": image_url,
+                        }
+                    )
     except Exception as e:
         print(f"Error searching Mealie for {recipe_name}: {e}")
     return results
@@ -219,8 +361,6 @@ async def _search_favorite_sites(recipe_name: str) -> list[dict[str, Any]]:
                 continue
 
             # Parse results
-            import re
-
             links = re.findall(r"link:\s*(https?://[^\s,]+)", search_results)
             titles = re.findall(r"title:\s*([^,]+),\s*link:", search_results)
             snippets = re.findall(r"snippet:\s*([^,]+(?:,(?!\s*title:)[^,]*)*),\s*title:", search_results)
@@ -236,12 +376,18 @@ async def _search_favorite_sites(recipe_name: str) -> list[dict[str, Any]]:
                         "url": link.strip(),
                         "slug": None,
                         "description": snippet.strip()[:200],
+                        "image_url": None,
                     }
                 )
 
             print(f"[Favorite Sites] Found {min(len(links), 2)} results from {site_name}")
         except Exception as e:
             print(f"[Favorite Sites] Error searching {site_name}: {e}")
+
+    # Filter out roundups and listicles, then fetch thumbnails
+    if results:
+        results = await filter_web_results(results, recipe_name)
+        results = await fetch_thumbnails_parallel(results)
 
     return results
 
@@ -260,9 +406,6 @@ async def _search_web(recipe_name: str) -> list[dict[str, Any]]:
             return results
 
         # Parse the DuckDuckGoSearchResults format: "snippet: ..., title: ..., link: ..."
-        # Results are separated by comma-space between entries
-        import re
-
         # Find all link entries
         links = re.findall(r"link:\s*(https?://[^\s,]+)", search_results)
         titles = re.findall(r"title:\s*([^,]+),\s*link:", search_results)
@@ -281,10 +424,18 @@ async def _search_web(recipe_name: str) -> list[dict[str, Any]]:
                     "url": link.strip(),
                     "slug": None,
                     "description": snippet.strip()[:200],
+                    "image_url": None,
                 }
             )
 
         print(f"[Web Search] Parsed {len(results)} web recipe options")
+
+        # Filter out roundups and listicles
+        results = await filter_web_results(results, recipe_name)
+
+        # Fetch thumbnails in parallel
+        results = await fetch_thumbnails_parallel(results)
+
     except Exception as e:
         print(f"[Web Search] Error searching web for {recipe_name}: {e}")
         import traceback
@@ -415,15 +566,58 @@ async def filter_ingredients_node(state: AgentState) -> dict[str, Any]:
     return {"pantry_items": pantry_items, "pending_cart": pending_cart, "messages": messages}
 
 
+async def _batch_extract_products(items: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    """Batch extract product names and quantities from all ingredients in a single LLM call."""
+    ingredients = [item["original"] for item in items]
+
+    batch_prompt = f"""Extract product names and quantities for these recipe ingredients.
+
+For EACH ingredient, return the grocery store search term and quantity to buy.
+
+RULES:
+- Use American grocery store product names
+- For produce, prefix with "fresh" (e.g., "fresh cilantro", "fresh green onions")
+- BEANS: Default to CANNED unless it says "dry/dried" (e.g., "black beans" -> "canned black beans")
+- Quantity = number of PACKAGES to buy, not recipe amount:
+  - "6 scallions" -> quantity 1 (one bunch)
+  - "3 cloves garlic" -> quantity 1 (one head)
+  - "2 cans tomatoes" -> quantity 2
+  - "1 cup beans" -> quantity 1 (one can)
+
+Ingredients:
+{json.dumps(ingredients, indent=2)}
+
+Return a JSON object where keys are the original ingredient strings and values are arrays of {{"product": str, "quantity": int}}.
+Example: {{"1 onion, diced": [{{"product": "yellow onion", "quantity": 1}}], "salt and pepper": [{{"product": "salt", "quantity": 1}}, {{"product": "black pepper", "quantity": 1}}]}}
+
+Return ONLY the JSON object."""
+
+    try:
+        response = await get_llm().ainvoke([HumanMessage(content=batch_prompt)])
+        content = response.content.strip().replace("```json", "").replace("```", "").strip()
+        return json.loads(content)
+    except Exception as e:
+        print(f"[batch_extract] Error: {e}, falling back to individual extraction")
+        return {}
+
+
 async def _process_cart_item(
-    item: dict[str, Any], modality: str, location_id: str, fulfillment_filter: str
+    item: dict[str, Any], modality: str, location_id: str, fulfillment_filter: str,
+    pre_extracted: list[dict[str, Any]] | None = None
 ) -> list[dict[str, Any]]:
-    """Process a single cart item - extract info, search, and add to cart. Returns a list (may be multiple products)."""
+    """Process a single cart item - search and add to cart. Returns a list (may be multiple products)."""
     query = item["original"]
     print(f"[process_cart_item] Processing: {query}", flush=True)
 
-    # Use LLM to extract product name(s) AND quantity
-    clean_prompt = f"""
+    # Use pre-extracted products if available, otherwise extract individually
+    if pre_extracted:
+        products_to_order = [
+            {"search_term": p.get("product", query), "quantity": max(1, int(p.get("quantity", 1)))}
+            for p in pre_extracted
+        ]
+    else:
+        # Fallback: Use LLM to extract product name(s) AND quantity
+        clean_prompt = f"""
     Extract the product name(s) and quantity to BUY from this ingredient line: "{query}".
 
     IMPORTANT: If the ingredient lists multiple items (with "and", "or", commas, or "mixture"),
@@ -459,6 +653,15 @@ async def _process_cart_item(
     - chickpeas (dried) -> "dried garbanzo beans"
     - prawns -> "shrimp"
 
+    BEANS: Default to CANNED unless recipe specifically says "dry", "dried", or "soaked":
+    - "black beans" -> "canned black beans"
+    - "kidney beans" -> "canned kidney beans"
+    - "pinto beans" -> "canned pinto beans"
+    - "cannellini beans" -> "canned cannellini beans"
+    - "chickpeas" or "garbanzo beans" -> "canned chickpeas"
+    - "1 cup black beans" -> "canned black beans" (quantity 1)
+    - "dried black beans" or "dry black beans" -> "dried black beans"
+
     Think about how the product is sold at a grocery store:
     - Produce (limes, onions, peppers): sold individually or by bunch
     - Green onions/scallions: sold in bunches, so "6 scallions" = quantity 1 (one bunch)
@@ -480,26 +683,28 @@ async def _process_cart_item(
     "2 cans (14oz) diced tomatoes" -> {{"product": "canned diced tomatoes", "quantity": 2}}
     "500g dried chickpeas" -> {{"product": "dried garbanzo beans", "quantity": 1}}
     "3 cloves garlic, minced" -> {{"product": "fresh garlic", "quantity": 1}}
+    "1 cup black beans" -> {{"product": "canned black beans", "quantity": 1}}
+    "1 can kidney beans, drained" -> {{"product": "canned kidney beans", "quantity": 1}}
 
     Return ONLY the JSON, no other text.
     """
-    try:
-        response = await get_llm().ainvoke([HumanMessage(content=clean_prompt)])
-        content = response.content.strip().replace("```json", "").replace("```", "").strip()
-        parsed = json.loads(content)
+        try:
+            response = await get_llm().ainvoke([HumanMessage(content=clean_prompt)])
+            content = response.content.strip().replace("```json", "").replace("```", "").strip()
+            parsed = json.loads(content)
 
-        # Normalize to list
-        if isinstance(parsed, dict):
-            parsed = [parsed]
+            # Normalize to list
+            if isinstance(parsed, dict):
+                parsed = [parsed]
 
-        products_to_order = []
-        for p in parsed:
-            products_to_order.append(
-                {"search_term": p.get("product", query), "quantity": max(1, int(p.get("quantity", 1)))}
-            )
-    except Exception as e:
-        print(f"[Order] Failed to parse '{query}': {e}")
-        products_to_order = [{"search_term": query, "quantity": 1}]
+            products_to_order = []
+            for p in parsed:
+                products_to_order.append(
+                    {"search_term": p.get("product", query), "quantity": max(1, int(p.get("quantity", 1)))}
+                )
+        except Exception as e:
+            print(f"[Order] Failed to parse '{query}': {e}")
+            products_to_order = [{"search_term": query, "quantity": 1}]
 
     # Process each product
     results = []
@@ -549,15 +754,15 @@ async def _process_cart_item(
                 )
                 continue
 
-            # Use LLM to pick the best matching product
+            # Use LLM to pick the best matching product - include size info
             product_options = "\n".join(
                 [
-                    f"{i + 1}. {p.get('description', 'Unknown')} (UPC: {p.get('upc', 'N/A')})"
+                    f"{i + 1}. {p.get('description', 'Unknown')} - {p.get('item', {}).get('size', 'unknown size')}"
                     for i, p in enumerate(products[:8])
                 ]
             )
 
-            pick_prompt = f"""I'm looking for: "{search_term}"
+            pick_prompt = f"""I'm looking for: "{search_term}" (quantity needed: {quantity})
 
 Here are the search results from the grocery store:
 {product_options}
@@ -565,29 +770,79 @@ Here are the search results from the grocery store:
 Which number is the BEST match for what I'm looking for? Consider:
 - I want the actual ingredient, not a prepared food or seasoning containing it
 - For produce, prefer fresh/raw items over processed
+- IMPORTANT: Prefer SINGLE items over multi-packs unless I need a large quantity
+  - "1 can black beans" -> pick a single can, NOT a 4-pack
+  - "2 cans tomatoes" -> pick a single can (I'll order qty 2), NOT a multi-pack
+  - Only pick multi-packs if quantity needed is 4+
+- Avoid "BIG DEAL", "Value Pack", "Family Size" unless quantity justifies it
 - "green onions" = scallions (fresh produce), NOT noodles or dips
 - "fresh mint" = mint leaves (herb), NOT gum or candy
-- "cilantro" = fresh cilantro (herb), NOT dried or seasoning
 
 Reply with ONLY the number (1-{min(8, len(products))}) of the best match, nothing else."""
 
+            # Rank products by LLM preference
             try:
                 pick_response = await get_llm().ainvoke([HumanMessage(content=pick_prompt)])
                 pick_num = int(pick_response.content.strip()) - 1
                 if 0 <= pick_num < len(products):
-                    selected_product = products[pick_num]
+                    # Reorder products with LLM's pick first
+                    preferred_order = [pick_num] + [i for i in range(len(products)) if i != pick_num]
                 else:
-                    selected_product = products[0]
+                    preferred_order = list(range(len(products)))
             except Exception:
-                selected_product = products[0]
+                preferred_order = list(range(len(products)))
 
-            # Check if the selected product is available for fulfillment
-            fulfillment_info = selected_product.get("item", {}).get("fulfillment", {})
-            is_unavailable = not fulfillment_info.get(fulfillment_filter.lower(), False)
+            # Try products in order until we find one in stock
+            selected_product = None
+            fallback_product = None  # Product with unknown stock (empty) as last resort
+            is_substitute = False
+
+            for idx in preferred_order[:8]:  # Try up to 8 products
+                product = products[idx]
+                inventory = product.get("item", {}).get("inventory", {})
+                stock_level = inventory.get("stockLevel", "").upper()
+
+                # Also check fulfillment availability
+                fulfillment_info = product.get("item", {}).get("fulfillment", {})
+                is_available_for_fulfillment = fulfillment_info.get(fulfillment_filter.lower()) is not False
+
+                print(
+                    f"[process_cart_item] Checking: {product['description']}, stock: {stock_level}, fulfillment: {fulfillment_info}",
+                    flush=True,
+                )
+
+                if not is_available_for_fulfillment:
+                    continue
+
+                # Prefer items with explicit stock levels
+                if stock_level in ("HIGH", "LOW", "MEDIUM"):
+                    selected_product = product
+                    is_substitute = idx != preferred_order[0]
+                    break
+                elif stock_level == "" and fallback_product is None:
+                    # No stock info - save as fallback but keep looking
+                    fallback_product = product
+
+            # Use fallback if no confirmed in-stock item found
+            if not selected_product and fallback_product:
+                selected_product = fallback_product
+                is_substitute = True  # Treat as substitute since stock is unknown
+
+            if not selected_product:
+                # All products out of stock
+                results.append(
+                    {
+                        "item": search_term,
+                        "quantity": quantity,
+                        "status": "unavailable",
+                        "error": "All matching products are out of stock",
+                    }
+                )
+                continue
 
             upc = selected_product["upc"]
             print(
-                f"[process_cart_item] Found product: {selected_product['description']}, UPC: {upc}, unavailable: {is_unavailable}",
+                f"[process_cart_item] Selected: {selected_product['description']}, UPC: {upc}, substitute: {is_substitute}",
                 flush=True,
             )
 
@@ -610,15 +865,15 @@ Reply with ONLY the number (1-{min(8, len(products))}) of the best match, nothin
                         res_data = json.loads(add_res.content[0].text)
                         if res_data.get("success"):
                             status = "added"
-                            if is_unavailable:
-                                error_details = f"Note: May not be available for {modality}"
+                            if is_substitute:
+                                error_details = "Substituted (first choice unavailable)"
                         else:
                             status = "failed"
                             error_details = res_data.get("error")
                 except Exception:
                     status = "added"
-                    if is_unavailable:
-                        error_details = f"Note: May not be available for {modality}"
+                    if is_substitute:
+                        error_details = "Substituted (first choice unavailable)"
 
             result_item = {
                 "item": search_term,
@@ -654,8 +909,17 @@ async def execute_order_node(state: AgentState) -> dict[str, Any]:
     # Map modality to Kroger fulfillment filter
     fulfillment_filter = "pickup" if modality == "PICKUP" else "delivery"
 
-    # Process all items in parallel
-    tasks = [_process_cart_item(item, modality, location_id, fulfillment_filter) for item in approved_cart]
+    # Batch extract all product names/quantities in one LLM call (faster than individual calls)
+    print("[execute_order] Batch extracting product names...", flush=True)
+    extracted_products = await _batch_extract_products(approved_cart)
+    print(f"[execute_order] Extracted {len(extracted_products)} items", flush=True)
+
+    # Process all items in parallel, passing pre-extracted data
+    tasks = []
+    for item in approved_cart:
+        pre_extracted = extracted_products.get(item["original"])
+        tasks.append(_process_cart_item(item, modality, location_id, fulfillment_filter, pre_extracted))
+
     nested_results = await asyncio.gather(*tasks)
 
     # Flatten results (each item can return multiple products)

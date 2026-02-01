@@ -44,7 +44,7 @@ def save_user_settings(settings):
 
 
 # Page config
-st.set_page_config(page_title="Remy - AI Grocery Agent", layout="wide")
+st.set_page_config(page_title="Remy - AI Grocery Agent", layout="wide", initial_sidebar_state="collapsed")
 
 # Persistent Thread ID for LangGraph
 if "thread_id" not in st.session_state:
@@ -305,56 +305,41 @@ with col1:
         with st.chat_message("assistant"):
             st.markdown("**Select a recipe to use:**")
 
-            # Build options for radio button
-            all_options = []
-            option_labels = []
+            from urllib.parse import urlparse
 
-            # Mealie options first
+            # Build options list - prioritize Mealie, limit to 5 total
             mealie_options = [r for r in recipe_options if r["source"] == "mealie"]
             web_options = [r for r in recipe_options if r["source"] == "web"]
 
-            if mealie_options:
-                st.markdown("**From Your Mealie Library:**")
-                for option in mealie_options:
-                    all_options.append(option)
-                    option_labels.append(f"{option['name']}")
-                    # Show description and link
-                    st.markdown(f"- [{option['name']}]({option['url']}) - {option.get('description', '')[:100]}")
+            all_options = []
+            all_options.extend(mealie_options[:5])  # Up to 5 from Mealie
+            remaining = 5 - len(all_options)
+            if remaining > 0:
+                all_options.extend(web_options[:remaining])  # Fill rest from web
 
-            if web_options:
-                st.markdown("**From the Web:**")
-                for option in web_options:
-                    all_options.append(option)
-                    option_labels.append(f"{option['name']}")
-                    st.markdown(f"- [{option['name']}]({option['url']}) - {option.get('description', '')[:100]}")
+            # Display as selectable cards in a grid
+            cols = st.columns(min(len(all_options), 3))
+            for i, option in enumerate(all_options):
+                with cols[i % 3]:
+                    # Show thumbnail if available
+                    if option.get("image_url"):
+                        st.image(option["image_url"], use_container_width=True)
 
-            st.divider()
-
-            # Radio selection
-            if all_options:
-
-                def format_option(i):
-                    opt = all_options[i]
-                    if opt["source"] == "mealie":
-                        return f"{opt['name']} (Mealie)"
+                    # Source badge
+                    if option["source"] == "mealie":
+                        source_label = "Mealie"
                     else:
-                        # Extract domain from URL
-                        from urllib.parse import urlparse
+                        source_label = urlparse(option["url"]).netloc.replace("www.", "")
 
-                        domain = urlparse(opt["url"]).netloc.replace("www.", "")
-                        return f"{opt['name']} ({domain})"
+                    st.markdown(f"**[{option['name']}]({option['url']})**")
+                    st.caption(source_label)
 
-                selected_index = st.radio(
-                    "Choose a recipe:", range(len(all_options)), format_func=format_option, index=0
-                )
-
-                if st.button("Use This Recipe"):
-                    selected_recipe = all_options[selected_index]
-                    asyncio.run(run_agent({"selected_recipe_options": [selected_recipe]}, "update_state"))
-
-                    with st.spinner("Fetching recipe details..."):
-                        asyncio.run(run_agent(None, "invoke"))
-                        st.rerun()
+                    # Select button for this recipe
+                    if st.button("Select", key=f"select_{i}", use_container_width=True):
+                        asyncio.run(run_agent({"selected_recipe_options": [option]}, "update_state"))
+                        with st.spinner("Fetching recipe details..."):
+                            asyncio.run(run_agent(None, "invoke"))
+                            st.rerun()
 
     # Chat input
     if prompt := st.chat_input("What would you like to cook?"):
