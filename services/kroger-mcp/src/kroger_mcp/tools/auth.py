@@ -4,6 +4,8 @@ Authentication tools module for Kroger MCP server
 This module provides OAuth authentication tools designed specifically for MCP context,
 where the browser-based authentication flow needs to be handled through user interaction
 rather than automated browser opening.
+
+Multi-tenant support: PKCE parameters and tokens are stored per-user.
 """
 
 import json
@@ -17,22 +19,28 @@ from kroger_api import KrogerAPI
 # Import the PKCE utilities from kroger-api
 from kroger_api.utils import generate_pkce_parameters
 
+from .shared import get_user_data_dir, get_user_token_file, _ensure_data_dir, DEFAULT_USER_ID
+
 # Load environment variables
 # load_dotenv()
 
-# Store PKCE parameters between steps
-_pkce_params = None
-_auth_state = None
-
-# Token storage location (use data/ directory for persistence)
-DATA_DIR = "data"
-USER_TOKEN_FILE = f"{DATA_DIR}/.kroger_token_user.json"
+# Store PKCE parameters between steps - now per-user
+_pkce_params: dict[str, dict] = {}
+_auth_state: dict[str, str] = {}
 
 
-def _save_token(token_info: dict[str, Any]) -> None:
-    """Save token to persistent storage"""
-    os.makedirs(DATA_DIR, exist_ok=True)
-    with open(USER_TOKEN_FILE, "w") as f:
+def _save_token(token_info: dict[str, Any], user_id: str | None = None) -> None:
+    """Save token to persistent storage for a specific user.
+
+    Args:
+        token_info: The token information to save.
+        user_id: The user's unique identifier.
+    """
+    if not user_id:
+        user_id = DEFAULT_USER_ID
+    _ensure_data_dir(user_id)
+    token_file = get_user_token_file(user_id)
+    with open(token_file, "w") as f:
         json.dump(token_info, f, indent=2)
 
 
@@ -40,7 +48,7 @@ def register_auth_tools(mcp):
     """Register authentication-specific tools with the FastMCP server"""
 
     @mcp.tool()
-    async def start_authentication(ctx: Context = None) -> dict[str, Any]:
+    async def start_authentication(user_id: str | None = None, ctx: Context = None) -> dict[str, Any]:
         """
         Start the OAuth authentication flow with Kroger.
 
@@ -48,16 +56,24 @@ def register_auth_tools(mcp):
         to authenticate with Kroger. After authorization, the user will be
         redirected to a callback URL that they need to copy and paste back.
 
+        Args:
+            user_id: The user's unique identifier for multi-tenant support.
+
         Returns:
             Dictionary with authorization URL and instructions
         """
         global _pkce_params, _auth_state
 
-        # Generate PKCE parameters
-        _pkce_params = generate_pkce_parameters()
+        if not user_id:
+            user_id = DEFAULT_USER_ID
+
+        # Generate PKCE parameters for this user
+        pkce_params = generate_pkce_parameters()
+        _pkce_params[user_id] = pkce_params
 
         # Generate a state parameter for CSRF protection
-        _auth_state = _pkce_params.get("state", _pkce_params.get("code_verifier")[:16])
+        auth_state = pkce_params.get("state", pkce_params.get("code_verifier")[:16])
+        _auth_state[user_id] = auth_state
 
         # Get client_id from environment
         client_id = os.environ.get("KROGER_CLIENT_ID")
@@ -79,16 +95,17 @@ def register_auth_tools(mcp):
         # Get the authorization URL with PKCE
         auth_url = kroger.authorization.get_authorization_url(
             scope=scopes,
-            state=_auth_state,
-            code_challenge=_pkce_params["code_challenge"],
-            code_challenge_method=_pkce_params["code_challenge_method"],
+            state=auth_state,
+            code_challenge=pkce_params["code_challenge"],
+            code_challenge_method=pkce_params["code_challenge_method"],
         )
 
         if ctx:
-            await ctx.info(f"Generated auth URL with PKCE: {auth_url}")
+            await ctx.info(f"[user:{user_id}] Generated auth URL with PKCE: {auth_url}")
 
         return {
             "auth_url": auth_url,
+            "user_id": user_id,
             "instructions": (
                 f"1. Click this link to authorize: [🔗 Authorize Kroger Access]({auth_url})\n"
                 "   - Please present the authorization URL as a clickable markdown link\n"
@@ -100,7 +117,7 @@ def register_auth_tools(mcp):
         }
 
     @mcp.tool()
-    async def complete_authentication(redirect_url: str, ctx: Context = None) -> dict[str, Any]:
+    async def complete_authentication(redirect_url: str, user_id: str | None = None, ctx: Context = None) -> dict[str, Any]:
         """
         Complete the OAuth flow using the redirect URL from Kroger.
 
@@ -110,15 +127,19 @@ def register_auth_tools(mcp):
 
         Args:
             redirect_url: The full URL from your browser after authorization
+            user_id: The user's unique identifier for multi-tenant support.
 
         Returns:
             Dictionary indicating authentication status
         """
         global _pkce_params, _auth_state
 
-        if not _pkce_params or not _auth_state:
+        if not user_id:
+            user_id = DEFAULT_USER_ID
+
+        if user_id not in _pkce_params or user_id not in _auth_state:
             if ctx:
-                await ctx.error("Authentication flow not started")
+                await ctx.error(f"[user:{user_id}] Authentication flow not started")
             return {"error": True, "message": "Authentication flow not started. Please use start_authentication first."}
 
         try:
@@ -129,7 +150,7 @@ def register_auth_tools(mcp):
             # Extract code and state
             if "code" not in query_params:
                 if ctx:
-                    await ctx.error("Authorization code not found in redirect URL")
+                    await ctx.error(f"[user:{user_id}] Authorization code not found in redirect URL")
                 return {
                     "error": True,
                     "message": "Authorization code not found in redirect URL. Please check the URL and try again.",
@@ -138,10 +159,13 @@ def register_auth_tools(mcp):
             auth_code = query_params["code"][0]
             received_state = query_params.get("state", [None])[0]
 
+            # Get the stored state for this user
+            expected_state = _auth_state[user_id]
+
             # Verify state parameter to prevent CSRF attacks
-            if received_state != _auth_state:
+            if received_state != expected_state:
                 if ctx:
-                    await ctx.error(f"State mismatch: expected {_auth_state}, got {received_state}")
+                    await ctx.error(f"[user:{user_id}] State mismatch: expected {expected_state}, got {received_state}")
                 return {
                     "error": True,
                     "message": "State parameter mismatch. This could indicate a CSRF attack. Please try authenticating again.",
@@ -153,7 +177,7 @@ def register_auth_tools(mcp):
 
             if not client_id or not client_secret:
                 if ctx:
-                    await ctx.error("Missing Kroger API credentials")
+                    await ctx.error(f"[user:{user_id}] Missing Kroger API credentials")
                 return {
                     "error": True,
                     "message": "Missing Kroger API credentials. Please set KROGER_CLIENT_ID and KROGER_CLIENT_SECRET.",
@@ -164,26 +188,29 @@ def register_auth_tools(mcp):
 
             # Exchange the authorization code for tokens with the code verifier
             if ctx:
-                await ctx.info("Exchanging authorization code for tokens with code_verifier")
+                await ctx.info(f"[user:{user_id}] Exchanging authorization code for tokens with code_verifier")
 
-            # Use the code_verifier from the PKCE parameters
+            # Use the code_verifier from the PKCE parameters for this user
+            pkce_params = _pkce_params[user_id]
             token_info = kroger.authorization.get_token_with_authorization_code(
-                auth_code, code_verifier=_pkce_params["code_verifier"]
+                auth_code, code_verifier=pkce_params["code_verifier"]
             )
 
-            # Save token to persistent storage
-            _save_token(token_info)
+            # Save token to persistent storage for this user
+            _save_token(token_info, user_id)
+            token_file = get_user_token_file(user_id)
 
-            # Clear PKCE parameters and state after successful exchange
-            _pkce_params = None
-            _auth_state = None
+            # Clear PKCE parameters and state for this user after successful exchange
+            del _pkce_params[user_id]
+            del _auth_state[user_id]
 
             if ctx:
-                await ctx.info(f"Authentication successful! Token saved to {USER_TOKEN_FILE}")
+                await ctx.info(f"[user:{user_id}] Authentication successful! Token saved to {token_file}")
 
             # Return success response
             return {
                 "success": True,
+                "user_id": user_id,
                 "message": "Authentication successful! You can now use Kroger API tools that require authentication.",
                 "token_info": {
                     "expires_in": token_info.get("expires_in"),
@@ -197,6 +224,6 @@ def register_auth_tools(mcp):
             error_message = str(e)
 
             if ctx:
-                await ctx.error(f"Authentication error: {error_message}")
+                await ctx.error(f"[user:{user_id}] Authentication error: {error_message}")
 
             return {"error": True, "message": f"Authentication failed: {error_message}"}

@@ -1,5 +1,7 @@
 """
 Product search and management tools for Kroger MCP server
+
+Multi-tenant support: User preferences (like preferred location) are per-user.
 """
 
 from typing import Any, Literal
@@ -16,7 +18,7 @@ def register_tools(mcp):
 
     @mcp.tool()
     async def get_product_images(
-        product_id: str, perspective: str = "front", location_id: str | None = None, ctx: Context = None
+        product_id: str, perspective: str = "front", location_id: str | None = None, user_id: str | None = None, ctx: Context = None
     ) -> Image:
         """
         Get an image for a specific product from the requested perspective.
@@ -27,13 +29,14 @@ def register_tools(mcp):
             product_id: The unique product identifier
             perspective: The image perspective to retrieve (default: "front")
             location_id: Store location ID (uses preferred if not provided)
+            user_id: The user's unique identifier for multi-tenant support
 
         Returns:
             The product image from the requested perspective
         """
         # Use preferred location if none provided
         if not location_id:
-            location_id = get_preferred_location_id()
+            location_id = get_preferred_location_id(user_id)
             if not location_id:
                 return {
                     "success": False,
@@ -131,6 +134,7 @@ def register_tools(mcp):
         limit: int = Field(default=10, ge=1, le=50, description="Number of results to return (1-50)"),
         fulfillment: Literal["csp", "delivery", "pickup"] | None = None,
         brand: str | None = None,
+        user_id: str | None = None,
         ctx: Context = None,
     ) -> dict[str, Any]:
         """
@@ -142,13 +146,14 @@ def register_tools(mcp):
             limit: Number of results to return (1-50)
             fulfillment: Filter by fulfillment method (csp=curbside pickup, delivery, pickup)
             brand: Filter by brand name
+            user_id: The user's unique identifier for multi-tenant support
 
         Returns:
             Dictionary containing product search results
         """
         # Use preferred location if none provided
         if not location_id:
-            location_id = get_preferred_location_id()
+            location_id = get_preferred_location_id(user_id)
             if not location_id:
                 return {
                     "success": False,
@@ -253,7 +258,7 @@ def register_tools(mcp):
 
     @mcp.tool()
     async def get_product_details(
-        product_id: str, location_id: str | None = None, ctx: Context = None
+        product_id: str, location_id: str | None = None, user_id: str | None = None, ctx: Context = None
     ) -> dict[str, Any]:
         """
         Get detailed information about a specific product.
@@ -261,13 +266,14 @@ def register_tools(mcp):
         Args:
             product_id: The unique product identifier
             location_id: Store location ID for pricing/availability (uses preferred if not provided)
+            user_id: The user's unique identifier for multi-tenant support
 
         Returns:
             Dictionary containing detailed product information
         """
         # Use preferred location if none provided
         if not location_id:
-            location_id = get_preferred_location_id()
+            location_id = get_preferred_location_id(user_id)
             if not location_id:
                 return {
                     "success": False,
@@ -357,7 +363,7 @@ def register_tools(mcp):
 
     @mcp.tool()
     async def search_products_by_id(
-        product_id: str, location_id: str | None = None, ctx: Context = None
+        product_id: str, location_id: str | None = None, user_id: str | None = None, ctx: Context = None
     ) -> dict[str, Any]:
         """
         Search for products by their specific product ID.
@@ -365,13 +371,14 @@ def register_tools(mcp):
         Args:
             product_id: The product ID to search for
             location_id: Store location ID (uses preferred location if not provided)
+            user_id: The user's unique identifier for multi-tenant support
 
         Returns:
             Dictionary containing matching products
         """
         # Use preferred location if none provided
         if not location_id:
-            location_id = get_preferred_location_id()
+            location_id = get_preferred_location_id(user_id)
             if not location_id:
                 return {
                     "success": False,

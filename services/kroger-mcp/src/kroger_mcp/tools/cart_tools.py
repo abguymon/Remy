@@ -1,5 +1,7 @@
 """
 Cart tracking and management functionality
+
+Multi-tenant support: Cart data is stored per-user in data/users/{user_id}/
 """
 
 import json
@@ -9,61 +11,70 @@ from typing import Any
 
 from fastmcp import Context
 
-from .shared import get_authenticated_client
-
-# Cart storage files (use data/ directory for persistence)
-DATA_DIR = "data"
-CART_FILE = f"{DATA_DIR}/kroger_cart.json"
-ORDER_HISTORY_FILE = f"{DATA_DIR}/kroger_order_history.json"
+from .shared import get_authenticated_client, get_user_data_dir, _ensure_data_dir, DEFAULT_USER_ID
 
 
-def _load_cart_data() -> dict[str, Any]:
-    """Load cart data from file"""
+def _get_cart_file(user_id: str | None = None) -> str:
+    """Get the path to a user's cart file."""
+    return os.path.join(get_user_data_dir(user_id), "kroger_cart.json")
+
+
+def _get_order_history_file(user_id: str | None = None) -> str:
+    """Get the path to a user's order history file."""
+    return os.path.join(get_user_data_dir(user_id), "kroger_order_history.json")
+
+
+def _load_cart_data(user_id: str | None = None) -> dict[str, Any]:
+    """Load cart data from file for a specific user."""
+    cart_file = _get_cart_file(user_id)
     try:
-        if os.path.exists(CART_FILE):
-            with open(CART_FILE) as f:
+        if os.path.exists(cart_file):
+            with open(cart_file) as f:
                 return json.load(f)
     except Exception:
         pass
     return {"current_cart": [], "last_updated": None, "preferred_location_id": None}
 
 
-def _save_cart_data(cart_data: dict[str, Any]) -> None:
-    """Save cart data to file"""
+def _save_cart_data(cart_data: dict[str, Any], user_id: str | None = None) -> None:
+    """Save cart data to file for a specific user."""
+    _ensure_data_dir(user_id)
+    cart_file = _get_cart_file(user_id)
     try:
-        os.makedirs(DATA_DIR, exist_ok=True)
-        with open(CART_FILE, "w") as f:
+        with open(cart_file, "w") as f:
             json.dump(cart_data, f, indent=2)
     except Exception as e:
-        print(f"Warning: Could not save cart data: {e}")
+        print(f"Warning: Could not save cart data for user {user_id}: {e}")
 
 
-def _load_order_history() -> list[dict[str, Any]]:
-    """Load order history from file"""
+def _load_order_history(user_id: str | None = None) -> list[dict[str, Any]]:
+    """Load order history from file for a specific user."""
+    history_file = _get_order_history_file(user_id)
     try:
-        if os.path.exists(ORDER_HISTORY_FILE):
-            with open(ORDER_HISTORY_FILE) as f:
+        if os.path.exists(history_file):
+            with open(history_file) as f:
                 return json.load(f)
     except Exception:
         pass
     return []
 
 
-def _save_order_history(history: list[dict[str, Any]]) -> None:
-    """Save order history to file"""
+def _save_order_history(history: list[dict[str, Any]], user_id: str | None = None) -> None:
+    """Save order history to file for a specific user."""
+    _ensure_data_dir(user_id)
+    history_file = _get_order_history_file(user_id)
     try:
-        os.makedirs(DATA_DIR, exist_ok=True)
-        with open(ORDER_HISTORY_FILE, "w") as f:
+        with open(history_file, "w") as f:
             json.dump(history, f, indent=2)
     except Exception as e:
-        print(f"Warning: Could not save order history: {e}")
+        print(f"Warning: Could not save order history for user {user_id}: {e}")
 
 
 def _add_item_to_local_cart(
-    product_id: str, quantity: int, modality: str, product_details: dict[str, Any] = None
+    product_id: str, quantity: int, modality: str, product_details: dict[str, Any] = None, user_id: str | None = None
 ) -> None:
-    """Add an item to the local cart tracking"""
-    cart_data = _load_cart_data()
+    """Add an item to the local cart tracking for a specific user."""
+    cart_data = _load_cart_data(user_id)
     current_cart = cart_data.get("current_cart", [])
 
     # Check if item already exists in cart
@@ -95,7 +106,7 @@ def _add_item_to_local_cart(
 
     cart_data["current_cart"] = current_cart
     cart_data["last_updated"] = datetime.now().isoformat()
-    _save_cart_data(cart_data)
+    _save_cart_data(cart_data, user_id)
 
 
 def register_tools(mcp):
@@ -103,7 +114,7 @@ def register_tools(mcp):
 
     @mcp.tool()
     async def add_items_to_cart(
-        product_id: str, quantity: int = 1, modality: str = "PICKUP", ctx: Context = None
+        product_id: str, quantity: int = 1, modality: str = "PICKUP", user_id: str | None = None, ctx: Context = None
     ) -> dict[str, Any]:
         """
         Add a single item to the user's Kroger cart and track it locally.
@@ -115,40 +126,41 @@ def register_tools(mcp):
             product_id: The product ID or UPC to add to cart
             quantity: Quantity to add (default: 1)
             modality: Fulfillment method - PICKUP or DELIVERY
+            user_id: The user's unique identifier for multi-tenant support
 
         Returns:
             Dictionary confirming the item was added to cart
         """
         try:
-            print(f"[cart] add_items_to_cart called: {product_id} x{quantity} {modality}", flush=True)
+            print(f"[cart][user:{user_id}] add_items_to_cart called: {product_id} x{quantity} {modality}", flush=True)
             if ctx:
-                await ctx.info(f"Adding {quantity}x {product_id} to cart with {modality} modality")
+                await ctx.info(f"[user:{user_id}] Adding {quantity}x {product_id} to cart with {modality} modality")
 
-            # Get authenticated client
-            print("[cart] Getting authenticated client...", flush=True)
-            client = get_authenticated_client()
-            print("[cart] Got client", flush=True)
+            # Get authenticated client for this user
+            print(f"[cart][user:{user_id}] Getting authenticated client...", flush=True)
+            client = get_authenticated_client(user_id)
+            print(f"[cart][user:{user_id}] Got client", flush=True)
 
             # Format the item for the API
             cart_item = {"upc": product_id, "quantity": quantity, "modality": modality}
 
             if ctx:
-                await ctx.info(f"Calling Kroger API to add item: {cart_item}")
+                await ctx.info(f"[user:{user_id}] Calling Kroger API to add item: {cart_item}")
 
             # Add the item to the actual Kroger cart
             # Note: add_to_cart returns None on success, raises exception on failure
-            print("[cart] Calling Kroger API add_to_cart...", flush=True)
+            print(f"[cart][user:{user_id}] Calling Kroger API add_to_cart...", flush=True)
             client.cart.add_to_cart([cart_item])
-            print("[cart] Kroger API call succeeded", flush=True)
+            print(f"[cart][user:{user_id}] Kroger API call succeeded", flush=True)
 
             if ctx:
-                await ctx.info("Successfully added item to Kroger cart")
+                await ctx.info(f"[user:{user_id}] Successfully added item to Kroger cart")
 
-            # Add to local cart tracking
-            _add_item_to_local_cart(product_id, quantity, modality)
+            # Add to local cart tracking for this user
+            _add_item_to_local_cart(product_id, quantity, modality, user_id=user_id)
 
             if ctx:
-                await ctx.info("Item added to local cart tracking")
+                await ctx.info(f"[user:{user_id}] Item added to local cart tracking")
 
             return {
                 "success": True,
@@ -156,12 +168,13 @@ def register_tools(mcp):
                 "product_id": product_id,
                 "quantity": quantity,
                 "modality": modality,
+                "user_id": user_id,
                 "timestamp": datetime.now().isoformat(),
             }
 
         except Exception as e:
             if ctx:
-                await ctx.error(f"Failed to add item to cart: {str(e)}")
+                await ctx.error(f"[user:{user_id}] Failed to add item to cart: {str(e)}")
 
             # Provide helpful error message for authentication issues
             error_message = str(e)
@@ -187,7 +200,7 @@ def register_tools(mcp):
                 }
 
     @mcp.tool()
-    async def bulk_add_to_cart(items: list[dict[str, Any]], ctx: Context = None) -> dict[str, Any]:
+    async def bulk_add_to_cart(items: list[dict[str, Any]], user_id: str | None = None, ctx: Context = None) -> dict[str, Any]:
         """
         Add multiple items to the user's Kroger cart in a single operation.
 
@@ -199,15 +212,16 @@ def register_tools(mcp):
                    - product_id: The product ID or UPC
                    - quantity: Quantity to add (default: 1)
                    - modality: PICKUP or DELIVERY (default: PICKUP)
+            user_id: The user's unique identifier for multi-tenant support
 
         Returns:
             Dictionary with results for each item
         """
         try:
             if ctx:
-                await ctx.info(f"Adding {len(items)} items to cart in bulk")
+                await ctx.info(f"[user:{user_id}] Adding {len(items)} items to cart in bulk")
 
-            client = get_authenticated_client()
+            client = get_authenticated_client(user_id)
 
             # Format items for the API
             cart_items = []
@@ -220,31 +234,32 @@ def register_tools(mcp):
                 cart_items.append(cart_item)
 
             if ctx:
-                await ctx.info(f"Calling Kroger API to add {len(cart_items)} items")
+                await ctx.info(f"[user:{user_id}] Calling Kroger API to add {len(cart_items)} items")
 
             # Add all items to the actual Kroger cart
             client.cart.add_to_cart(cart_items)
 
             if ctx:
-                await ctx.info("Successfully added all items to Kroger cart")
+                await ctx.info(f"[user:{user_id}] Successfully added all items to Kroger cart")
 
-            # Add all items to local cart tracking
+            # Add all items to local cart tracking for this user
             for item in items:
-                _add_item_to_local_cart(item["product_id"], item.get("quantity", 1), item.get("modality", "PICKUP"))
+                _add_item_to_local_cart(item["product_id"], item.get("quantity", 1), item.get("modality", "PICKUP"), user_id=user_id)
 
             if ctx:
-                await ctx.info("All items added to local cart tracking")
+                await ctx.info(f"[user:{user_id}] All items added to local cart tracking")
 
             return {
                 "success": True,
                 "message": f"Successfully added {len(items)} items to cart",
                 "items_added": len(items),
+                "user_id": user_id,
                 "timestamp": datetime.now().isoformat(),
             }
 
         except Exception as e:
             if ctx:
-                await ctx.error(f"Failed to bulk add items to cart: {str(e)}")
+                await ctx.error(f"[user:{user_id}] Failed to bulk add items to cart: {str(e)}")
 
             error_message = str(e)
             if "401" in error_message or "Unauthorized" in error_message:
@@ -261,18 +276,21 @@ def register_tools(mcp):
                 }
 
     @mcp.tool()
-    async def view_current_cart(ctx: Context = None) -> dict[str, Any]:
+    async def view_current_cart(user_id: str | None = None, ctx: Context = None) -> dict[str, Any]:
         """
         View the current cart contents tracked locally.
 
         Note: This tool can only see items that were added via this MCP server.
         The Kroger API does not provide permission to query the actual user cart contents.
 
+        Args:
+            user_id: The user's unique identifier for multi-tenant support
+
         Returns:
             Dictionary containing current cart items and summary
         """
         try:
-            cart_data = _load_cart_data()
+            cart_data = _load_cart_data(user_id)
             current_cart = cart_data.get("current_cart", [])
 
             # Calculate summary
@@ -282,6 +300,7 @@ def register_tools(mcp):
 
             return {
                 "success": True,
+                "user_id": user_id,
                 "current_cart": current_cart,
                 "summary": {
                     "total_items": len(current_cart),
@@ -295,7 +314,7 @@ def register_tools(mcp):
             return {"success": False, "error": f"Failed to view cart: {str(e)}"}
 
     @mcp.tool()
-    async def remove_from_cart(product_id: str, modality: str = None, ctx: Context = None) -> dict[str, Any]:
+    async def remove_from_cart(product_id: str, modality: str = None, user_id: str | None = None, ctx: Context = None) -> dict[str, Any]:
         """
         Remove an item from the local cart tracking only.
 
@@ -310,12 +329,13 @@ def register_tools(mcp):
         Args:
             product_id: The product ID to remove
             modality: Specific modality to remove (if None, removes all instances)
+            user_id: The user's unique identifier for multi-tenant support
 
         Returns:
             Dictionary confirming the removal from local tracking
         """
         try:
-            cart_data = _load_cart_data()
+            cart_data = _load_cart_data(user_id)
             current_cart = cart_data.get("current_cart", [])
             original_count = len(current_cart)
 
@@ -334,7 +354,7 @@ def register_tools(mcp):
 
             if items_removed > 0:
                 cart_data["last_updated"] = datetime.now().isoformat()
-                _save_cart_data(cart_data)
+                _save_cart_data(cart_data, user_id)
 
             return {
                 "success": True,
@@ -342,12 +362,13 @@ def register_tools(mcp):
                 "items_removed": items_removed,
                 "product_id": product_id,
                 "modality": modality,
+                "user_id": user_id,
             }
         except Exception as e:
             return {"success": False, "error": f"Failed to remove from cart: {str(e)}"}
 
     @mcp.tool()
-    async def clear_current_cart(ctx: Context = None) -> dict[str, Any]:
+    async def clear_current_cart(user_id: str | None = None, ctx: Context = None) -> dict[str, Any]:
         """
         Clear all items from the local cart tracking only.
 
@@ -360,39 +381,44 @@ def register_tools(mcp):
         2. You need to update the local tracking to reflect that change
         3. Or when the local tracking is out of sync with the actual cart
 
+        Args:
+            user_id: The user's unique identifier for multi-tenant support
+
         Returns:
             Dictionary confirming the local cart tracking was cleared
         """
         try:
-            cart_data = _load_cart_data()
+            cart_data = _load_cart_data(user_id)
             items_count = len(cart_data.get("current_cart", []))
 
             cart_data["current_cart"] = []
             cart_data["last_updated"] = datetime.now().isoformat()
-            _save_cart_data(cart_data)
+            _save_cart_data(cart_data, user_id)
 
             return {
                 "success": True,
                 "message": f"Cleared {items_count} items from local cart tracking",
                 "items_cleared": items_count,
+                "user_id": user_id,
             }
         except Exception as e:
             return {"success": False, "error": f"Failed to clear cart: {str(e)}"}
 
     @mcp.tool()
-    async def mark_order_placed(order_notes: str = None, ctx: Context = None) -> dict[str, Any]:
+    async def mark_order_placed(order_notes: str = None, user_id: str | None = None, ctx: Context = None) -> dict[str, Any]:
         """
         Mark the current cart as an order that has been placed and move it to order history.
         Use this after you've completed checkout on the Kroger website/app.
 
         Args:
             order_notes: Optional notes about the order
+            user_id: The user's unique identifier for multi-tenant support
 
         Returns:
             Dictionary confirming the order was recorded
         """
         try:
-            cart_data = _load_cart_data()
+            cart_data = _load_cart_data(user_id)
             current_cart = cart_data.get("current_cart", [])
 
             if not current_cart:
@@ -407,15 +433,15 @@ def register_tools(mcp):
                 "notes": order_notes,
             }
 
-            # Load and update order history
-            order_history = _load_order_history()
+            # Load and update order history for this user
+            order_history = _load_order_history(user_id)
             order_history.append(order_record)
-            _save_order_history(order_history)
+            _save_order_history(order_history, user_id)
 
-            # Clear current cart
+            # Clear current cart for this user
             cart_data["current_cart"] = []
             cart_data["last_updated"] = datetime.now().isoformat()
-            _save_cart_data(cart_data)
+            _save_cart_data(cart_data, user_id)
 
             return {
                 "success": True,
@@ -424,12 +450,13 @@ def register_tools(mcp):
                 "items_placed": order_record["item_count"],
                 "total_quantity": order_record["total_quantity"],
                 "placed_at": order_record["placed_at"],
+                "user_id": user_id,
             }
         except Exception as e:
             return {"success": False, "error": f"Failed to mark order as placed: {str(e)}"}
 
     @mcp.tool()
-    async def view_order_history(limit: int = 10, ctx: Context = None) -> dict[str, Any]:
+    async def view_order_history(limit: int = 10, user_id: str | None = None, ctx: Context = None) -> dict[str, Any]:
         """
         View the history of placed orders.
 
@@ -438,6 +465,7 @@ def register_tools(mcp):
 
         Args:
             limit: Number of recent orders to show (1-50)
+            user_id: The user's unique identifier for multi-tenant support
 
         Returns:
             Dictionary containing order history
@@ -446,7 +474,7 @@ def register_tools(mcp):
             # Ensure limit is within bounds
             limit = max(1, min(50, limit))
 
-            order_history = _load_order_history()
+            order_history = _load_order_history(user_id)
 
             # Sort by placed_at date (most recent first) and limit
             sorted_orders = sorted(order_history, key=lambda x: x.get("placed_at", ""), reverse=True)
@@ -459,6 +487,7 @@ def register_tools(mcp):
 
             return {
                 "success": True,
+                "user_id": user_id,
                 "orders": limited_orders,
                 "showing": len(limited_orders),
                 "summary": {

@@ -1,5 +1,7 @@
 """
 Location management tools for Kroger MCP server
+
+Multi-tenant support: User preferences (like preferred location) are stored per-user.
 """
 
 from typing import Any
@@ -197,18 +199,19 @@ def register_tools(mcp):
             return {"success": False, "error": str(e)}
 
     @mcp.tool()
-    async def set_preferred_location(location_id: str, ctx: Context = None) -> dict[str, Any]:
+    async def set_preferred_location(location_id: str, user_id: str | None = None, ctx: Context = None) -> dict[str, Any]:
         """
         Set a preferred store location for future operations.
 
         Args:
             location_id: The unique identifier for the store location
+            user_id: The user's unique identifier for multi-tenant support
 
         Returns:
             Dictionary confirming the preferred location has been set
         """
         if ctx:
-            await ctx.info(f"Setting preferred location to {location_id}")
+            await ctx.info(f"[user:{user_id}] Setting preferred location to {location_id}")
 
         # Verify the location exists
         client = get_client_credentials_client()
@@ -222,38 +225,42 @@ def register_tools(mcp):
             location_details = client.location.get_location(location_id)
             loc_data = location_details.get("data", {})
 
-            set_preferred_location_id(location_id)
+            set_preferred_location_id(location_id, user_id)
 
             if ctx:
-                await ctx.info(f"Preferred location set to {loc_data.get('name', location_id)}")
+                await ctx.info(f"[user:{user_id}] Preferred location set to {loc_data.get('name', location_id)}")
 
             return {
                 "success": True,
                 "preferred_location_id": location_id,
                 "location_name": loc_data.get("name"),
+                "user_id": user_id,
                 "message": f"Preferred location set to {loc_data.get('name', location_id)}",
             }
 
         except Exception as e:
             if ctx:
-                await ctx.error(f"Error setting preferred location: {str(e)}")
+                await ctx.error(f"[user:{user_id}] Error setting preferred location: {str(e)}")
             return {"success": False, "error": str(e)}
 
     @mcp.tool()
-    async def get_preferred_location(ctx: Context = None) -> dict[str, Any]:
+    async def get_preferred_location(user_id: str | None = None, ctx: Context = None) -> dict[str, Any]:
         """
         Get the currently set preferred store location.
+
+        Args:
+            user_id: The user's unique identifier for multi-tenant support
 
         Returns:
             Dictionary containing the preferred location information
         """
-        preferred_location_id = get_preferred_location_id()
+        preferred_location_id = get_preferred_location_id(user_id)
 
         if not preferred_location_id:
             return {"success": False, "message": "No preferred location set. Use set_preferred_location to set one."}
 
         if ctx:
-            await ctx.info(f"Getting preferred location details for {preferred_location_id}")
+            await ctx.info(f"[user:{user_id}] Getting preferred location details for {preferred_location_id}")
 
         # Get location details
         client = get_client_credentials_client()
@@ -265,6 +272,7 @@ def register_tools(mcp):
             return {
                 "success": True,
                 "preferred_location_id": preferred_location_id,
+                "user_id": user_id,
                 "location_details": {
                     "name": loc_data.get("name"),
                     "chain": loc_data.get("chain"),
@@ -275,7 +283,7 @@ def register_tools(mcp):
 
         except Exception as e:
             if ctx:
-                await ctx.error(f"Error getting preferred location details: {str(e)}")
+                await ctx.error(f"[user:{user_id}] Error getting preferred location details: {str(e)}")
             return {"success": False, "error": str(e), "preferred_location_id": preferred_location_id}
 
     @mcp.tool()

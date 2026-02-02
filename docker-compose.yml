@@ -50,6 +50,7 @@ services:
     networks:
       - remy-net
 
+  # Legacy Streamlit UI (can be removed after migration)
   remy-agent:
     build: ./services/remy-agent
     container_name: remy-agent
@@ -68,8 +69,49 @@ services:
       - kroger-mcp
     networks:
       - remy-net
+    profiles:
+      - legacy
+
+  # New FastAPI backend
+  remy-api:
+    build: ./services/remy-api
+    container_name: remy-api
+    restart: always
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      INITIAL_INVITE_CODE: ${INITIAL_INVITE_CODE:-}
+      KROGER_MCP_URL: http://kroger-mcp:8000/sse
+      MEALIE_MCP_URL: http://mealie-mcp-server:8000/sse
+      MEALIE_EXTERNAL_URL: http://localhost:9925
+      DATABASE_URL: sqlite+aiosqlite:///data/remy.db
+    volumes:
+      - remy-api-data:/app/data
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mealie-mcp-server
+      - kroger-mcp
+    networks:
+      - remy-net
+
+  # New React frontend
+  remy-web:
+    build:
+      context: ./services/remy-web
+      args:
+        VITE_API_URL: /api
+    container_name: remy-web
+    restart: always
+    ports:
+      - "3000:80"
+    depends_on:
+      - remy-api
+    networks:
+      - remy-net
 
 volumes:
   mealie-data:
   kroger-data:
   remy-data:
+  remy-api-data:
