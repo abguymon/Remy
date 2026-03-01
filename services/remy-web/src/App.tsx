@@ -6,6 +6,7 @@ import Register from './pages/Register'
 import Home from './pages/Home'
 import Cart from './pages/Cart'
 import Settings from './pages/Settings'
+import NotFound from './pages/NotFound'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((state) => state.token)
@@ -34,6 +35,7 @@ function App() {
         <Route path="cart" element={<Cart />} />
         <Route path="settings" element={<Settings />} />
       </Route>
+      <Route path="*" element={<NotFound />} />
     </Routes>
   )
 }

@@ -1,24 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { cartApi } from '../api/client'
 import { ShoppingCart, Trash2, Loader2, Package } from 'lucide-react'
-
-interface CartItem {
-  product_id: string
-  name: string
-  quantity: number
-  price?: number
-  image_url?: string
-}
-
-interface CartData {
-  items: CartItem[]
-  total?: number
-}
+import type { CartData } from '../types/api'
 
 export default function Cart() {
   const queryClient = useQueryClient()
 
-  const { data: cart, isLoading } = useQuery<CartData>({
+  const { data: cart, isLoading, error } = useQuery<CartData>({
     queryKey: ['cart'],
     queryFn: cartApi.getCart,
   })
@@ -34,6 +22,14 @@ export default function Cart() {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+        <p className="text-red-600">Failed to load cart. Please try again.</p>
       </div>
     )
   }

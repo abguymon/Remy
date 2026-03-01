@@ -30,12 +30,6 @@ class Token(BaseModel):
     expires_in: int
 
 
-class TokenRefresh(BaseModel):
-    """Token refresh request"""
-
-    refresh_token: str
-
-
 # User schemas
 class UserResponse(BaseModel):
     """User profile response"""
@@ -146,15 +140,14 @@ class AddToCartRequest(BaseModel):
 
 # Invite code schemas
 class InviteCodeCreate(BaseModel):
-    """Create invite code request (admin)"""
+    """Create invite code request"""
 
-    email: str | None = None
+    pass
 
 
 class InviteCodeResponse(BaseModel):
     """Invite code response"""
 
     code: str
-    email: str | None = None
     created_at: datetime
     used: bool

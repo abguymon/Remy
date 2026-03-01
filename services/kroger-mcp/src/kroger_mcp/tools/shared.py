@@ -8,6 +8,7 @@ tools that need user-specific state.
 
 import json
 import os
+import re
 
 from kroger_api.kroger_api import KrogerAPI
 from kroger_api.token_storage import load_token
@@ -26,6 +27,22 @@ DATA_DIR = "data"
 # Default user ID for backwards compatibility (single-user mode)
 DEFAULT_USER_ID = "default"
 
+_USER_ID_PATTERN = re.compile(r'^[a-zA-Z0-9_-]+$')
+
+
+def validate_user_id(user_id: str | None) -> str:
+    """Validate and normalize user_id to prevent path traversal."""
+    if user_id is None:
+        return DEFAULT_USER_ID
+    user_id = user_id.strip()
+    if not user_id:
+        return DEFAULT_USER_ID
+    if not _USER_ID_PATTERN.match(user_id):
+        raise ValueError(f"Invalid user_id format: must be alphanumeric, hyphens, or underscores")
+    if len(user_id) > 128:
+        raise ValueError("user_id too long (max 128 characters)")
+    return user_id
+
 
 def get_user_data_dir(user_id: str | None = None) -> str:
     """Get the data directory for a specific user.
@@ -36,8 +53,7 @@ def get_user_data_dir(user_id: str | None = None) -> str:
     Returns:
         Path to the user's data directory (e.g., data/users/{user_id}/)
     """
-    if not user_id:
-        user_id = DEFAULT_USER_ID
+    user_id = validate_user_id(user_id)
     return os.path.join(DATA_DIR, "users", user_id)
 
 
@@ -141,8 +157,7 @@ def get_authenticated_client(user_id: str | None = None) -> KrogerAPI:
     """
     global _authenticated_clients
 
-    if not user_id:
-        user_id = DEFAULT_USER_ID
+    user_id = validate_user_id(user_id)
 
     # Check if we have a cached client for this user that's still valid
     if user_id in _authenticated_clients and _authenticated_clients[user_id].test_current_token():
@@ -215,8 +230,7 @@ def invalidate_authenticated_client(user_id: str | None = None):
         user_id: The user's unique identifier. If None, invalidates for DEFAULT_USER_ID.
     """
     global _authenticated_clients
-    if not user_id:
-        user_id = DEFAULT_USER_ID
+    user_id = validate_user_id(user_id)
     if user_id in _authenticated_clients:
         del _authenticated_clients[user_id]
 

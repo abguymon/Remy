@@ -19,7 +19,7 @@ from kroger_api import KrogerAPI
 # Import the PKCE utilities from kroger-api
 from kroger_api.utils import generate_pkce_parameters
 
-from .shared import get_user_data_dir, get_user_token_file, _ensure_data_dir, DEFAULT_USER_ID
+from .shared import get_user_data_dir, get_user_token_file, _ensure_data_dir, DEFAULT_USER_ID, validate_user_id
 
 # Load environment variables
 # load_dotenv()
@@ -36,8 +36,7 @@ def _save_token(token_info: dict[str, Any], user_id: str | None = None) -> None:
         token_info: The token information to save.
         user_id: The user's unique identifier.
     """
-    if not user_id:
-        user_id = DEFAULT_USER_ID
+    user_id = validate_user_id(user_id)
     _ensure_data_dir(user_id)
     token_file = get_user_token_file(user_id)
     with open(token_file, "w") as f:
@@ -64,8 +63,7 @@ def register_auth_tools(mcp):
         """
         global _pkce_params, _auth_state
 
-        if not user_id:
-            user_id = DEFAULT_USER_ID
+        user_id = validate_user_id(user_id)
 
         # Generate PKCE parameters for this user
         pkce_params = generate_pkce_parameters()
@@ -134,8 +132,7 @@ def register_auth_tools(mcp):
         """
         global _pkce_params, _auth_state
 
-        if not user_id:
-            user_id = DEFAULT_USER_ID
+        user_id = validate_user_id(user_id)
 
         if user_id not in _pkce_params or user_id not in _auth_state:
             if ctx:

@@ -130,25 +130,32 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher, get_client: Calla
             raise ToolError(error_msg) from e
 
     @mcp.tool()
-    def create_recipe(name: str, ingredients: list[str], instructions: list[str]) -> dict[str, Any]:
+    def create_recipe(
+        name: str,
+        ingredients: list[str],
+        instructions: list[str],
+        mealie_api_key: str | None = None,
+    ) -> dict[str, Any]:
         """Create a new recipe
 
         Args:
             name: The name of the new recipe to be created.
             ingredients: A list of ingredients for the recipe include quantities and units.
             instructions: A list of instructions for preparing the recipe.
+            mealie_api_key: Optional custom Mealie API key for multi-tenant support.
 
         Returns:
             Dict[str, Any]: The created recipe details.
         """
         try:
-            logger.info({"message": "Creating recipe", "name": name})
-            slug = mealie.create_recipe(name)
-            recipe_json = mealie.get_recipe(slug)
+            client = get_client(mealie_api_key)
+            logger.info({"message": "Creating recipe", "name": name, "custom_api_key": mealie_api_key is not None})
+            slug = client.create_recipe(name)
+            recipe_json = client.get_recipe(slug)
             recipe = Recipe.model_validate(recipe_json)
             recipe.recipeIngredient = [RecipeIngredient(note=i) for i in ingredients]
             recipe.recipeInstructions = [RecipeInstruction(text=i) for i in instructions]
-            return mealie.update_recipe(slug, recipe.model_dump(exclude_none=True))
+            return client.update_recipe(slug, recipe.model_dump(exclude_none=True))
         except Exception as e:
             error_msg = f"Error creating recipe '{name}': {str(e)}"
             logger.error({"message": error_msg})
@@ -156,20 +163,26 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher, get_client: Calla
             raise ToolError(error_msg) from e
 
     @mcp.tool()
-    def create_recipe_from_url(url: str, include_tags: bool = False) -> dict[str, Any]:
+    def create_recipe_from_url(
+        url: str,
+        include_tags: bool = False,
+        mealie_api_key: str | None = None,
+    ) -> dict[str, Any]:
         """Create a new recipe by importing from a URL. Mealie will scrape the recipe
         data from the provided URL and create a new recipe in the database.
 
         Args:
             url: The URL of the recipe page to scrape (e.g., "https://www.allrecipes.com/recipe/123")
             include_tags: Whether to include tags parsed from the recipe page (default: False)
+            mealie_api_key: Optional custom Mealie API key for multi-tenant support.
 
         Returns:
             Dict[str, Any]: The slug of the newly created recipe.
         """
         try:
-            logger.info({"message": "Creating recipe from URL", "url": url})
-            slug = mealie.create_recipe_from_url(url, include_tags)
+            client = get_client(mealie_api_key)
+            logger.info({"message": "Creating recipe from URL", "url": url, "custom_api_key": mealie_api_key is not None})
+            slug = client.create_recipe_from_url(url, include_tags)
             return {"slug": slug, "success": True}
         except Exception as e:
             error_msg = f"Error creating recipe from URL '{url}': {str(e)}"
@@ -182,6 +195,7 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher, get_client: Calla
         slug: str,
         ingredients: list[str],
         instructions: list[str],
+        mealie_api_key: str | None = None,
     ) -> dict[str, Any]:
         """Replaces the ingredients and instructions of an existing recipe.
 
@@ -189,19 +203,43 @@ def register_recipe_tools(mcp: FastMCP, mealie: MealieFetcher, get_client: Calla
             slug: The unique text identifier for the recipe to be updated.
             ingredients: A list of ingredients for the recipe include quantities and units.
             instructions: A list of instructions for preparing the recipe.
+            mealie_api_key: Optional custom Mealie API key for multi-tenant support.
 
         Returns:
             Dict[str, Any]: The updated recipe details.
         """
         try:
-            logger.info({"message": "Updating recipe", "slug": slug})
-            recipe_json = mealie.get_recipe(slug)
+            client = get_client(mealie_api_key)
+            logger.info({"message": "Updating recipe", "slug": slug, "custom_api_key": mealie_api_key is not None})
+            recipe_json = client.get_recipe(slug)
             recipe = Recipe.model_validate(recipe_json)
             recipe.recipeIngredient = [RecipeIngredient(note=i) for i in ingredients]
             recipe.recipeInstructions = [RecipeInstruction(text=i) for i in instructions]
-            return mealie.update_recipe(slug, recipe.model_dump(exclude_none=True))
+            return client.update_recipe(slug, recipe.model_dump(exclude_none=True))
         except Exception as e:
             error_msg = f"Error updating recipe '{slug}': {str(e)}"
+            logger.error({"message": error_msg})
+            logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
+            raise ToolError(error_msg) from e
+
+    @mcp.tool()
+    def delete_recipe(slug: str, mealie_api_key: str | None = None) -> str:
+        """Delete a recipe by its slug.
+
+        Args:
+            slug: The unique text identifier for the recipe to delete.
+            mealie_api_key: Optional custom Mealie API key for multi-tenant support.
+
+        Returns:
+            str: Confirmation message of the deletion.
+        """
+        try:
+            client = get_client(mealie_api_key)
+            logger.info({"message": "Deleting recipe", "slug": slug, "custom_api_key": mealie_api_key is not None})
+            client.delete_recipe(slug)
+            return f"Recipe '{slug}' has been successfully deleted."
+        except Exception as e:
+            error_msg = f"Error deleting recipe '{slug}': {str(e)}"
             logger.error({"message": error_msg})
             logger.debug({"message": "Error traceback", "traceback": traceback.format_exc()})
             raise ToolError(error_msg) from e

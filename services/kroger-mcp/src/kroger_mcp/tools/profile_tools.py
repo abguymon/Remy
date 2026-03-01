@@ -1,5 +1,7 @@
 """
 User profile and authentication tools for Kroger MCP server
+
+Multi-tenant support: All tools accept user_id for per-user authentication.
 """
 
 from typing import Any
@@ -13,29 +15,33 @@ def register_tools(mcp):
     """Register profile-related tools with the FastMCP server"""
 
     @mcp.tool()
-    async def get_user_profile(ctx: Context = None) -> dict[str, Any]:
+    async def get_user_profile(user_id: str | None = None, ctx: Context = None) -> dict[str, Any]:
         """
         Get the authenticated user's Kroger profile information.
+
+        Args:
+            user_id: The user's unique identifier for multi-tenant support
 
         Returns:
             Dictionary containing user profile data
         """
         if ctx:
-            await ctx.info("Getting user profile information")
+            await ctx.info(f"[user:{user_id}] Getting user profile information")
 
         try:
-            client = get_authenticated_client()
+            client = get_authenticated_client(user_id=user_id)
             profile = client.identity.get_profile()
 
             if profile and "data" in profile:
                 profile_id = profile["data"].get("id", "N/A")
 
                 if ctx:
-                    await ctx.info(f"Retrieved profile for user ID: {profile_id}")
+                    await ctx.info(f"[user:{user_id}] Retrieved profile for user ID: {profile_id}")
 
                 return {
                     "success": True,
                     "profile_id": profile_id,
+                    "user_id": user_id,
                     "message": "User profile retrieved successfully",
                     "note": "The Kroger Identity API only provides the profile ID for privacy reasons.",
                 }
@@ -44,30 +50,34 @@ def register_tools(mcp):
 
         except Exception as e:
             if ctx:
-                await ctx.error(f"Error getting user profile: {str(e)}")
+                await ctx.error(f"[user:{user_id}] Error getting user profile: {str(e)}")
             return {"success": False, "error": str(e)}
 
     @mcp.tool()
-    async def test_authentication(ctx: Context = None) -> dict[str, Any]:
+    async def test_authentication(user_id: str | None = None, ctx: Context = None) -> dict[str, Any]:
         """
         Test if the current authentication token is valid.
+
+        Args:
+            user_id: The user's unique identifier for multi-tenant support
 
         Returns:
             Dictionary indicating authentication status
         """
         if ctx:
-            await ctx.info("Testing authentication token validity")
+            await ctx.info(f"[user:{user_id}] Testing authentication token validity")
 
         try:
-            client = get_authenticated_client()
+            client = get_authenticated_client(user_id=user_id)
             is_valid = client.test_current_token()
 
             if ctx:
-                await ctx.info(f"Authentication test result: {'valid' if is_valid else 'invalid'}")
+                await ctx.info(f"[user:{user_id}] Authentication test result: {'valid' if is_valid else 'invalid'}")
 
             result = {
                 "success": True,
                 "token_valid": is_valid,
+                "user_id": user_id,
                 "message": f"Authentication token is {'valid' if is_valid else 'invalid'}",
             }
 
@@ -88,24 +98,27 @@ def register_tools(mcp):
 
         except Exception as e:
             if ctx:
-                await ctx.error(f"Error testing authentication: {str(e)}")
+                await ctx.error(f"[user:{user_id}] Error testing authentication: {str(e)}")
             return {"success": False, "error": str(e), "token_valid": False}
 
     @mcp.tool()
-    async def get_authentication_info(ctx: Context = None) -> dict[str, Any]:
+    async def get_authentication_info(user_id: str | None = None, ctx: Context = None) -> dict[str, Any]:
         """
         Get information about the current authentication state and token.
+
+        Args:
+            user_id: The user's unique identifier for multi-tenant support
 
         Returns:
             Dictionary containing authentication information
         """
         if ctx:
-            await ctx.info("Getting authentication information")
+            await ctx.info(f"[user:{user_id}] Getting authentication information")
 
         try:
-            client = get_authenticated_client()
+            client = get_authenticated_client(user_id=user_id)
 
-            result = {"success": True, "authenticated": True, "message": "User is authenticated"}
+            result = {"success": True, "authenticated": True, "user_id": user_id, "message": "User is authenticated"}
 
             # Get token information if available
             if hasattr(client.client, "token_info") and client.client.token_info:
@@ -136,35 +149,39 @@ def register_tools(mcp):
 
         except Exception as e:
             if ctx:
-                await ctx.error(f"Error getting authentication info: {str(e)}")
+                await ctx.error(f"[user:{user_id}] Error getting authentication info: {str(e)}")
             return {"success": False, "error": str(e), "authenticated": False}
 
     @mcp.tool()
-    async def force_reauthenticate(ctx: Context = None) -> dict[str, Any]:
+    async def force_reauthenticate(user_id: str | None = None, ctx: Context = None) -> dict[str, Any]:
         """
         Force re-authentication by clearing the current authentication token.
         Use this if you're having authentication issues or need to log in as a different user.
+
+        Args:
+            user_id: The user's unique identifier for multi-tenant support
 
         Returns:
             Dictionary indicating the re-authentication was initiated
         """
         if ctx:
-            await ctx.info("Forcing re-authentication by clearing current token")
+            await ctx.info(f"[user:{user_id}] Forcing re-authentication by clearing current token")
 
         try:
-            # Clear the current authenticated client
-            invalidate_authenticated_client()
+            # Clear the current authenticated client for this user
+            invalidate_authenticated_client(user_id=user_id)
 
             if ctx:
-                await ctx.info("Authentication token cleared. Next cart operation will trigger re-authentication.")
+                await ctx.info(f"[user:{user_id}] Authentication token cleared. Next cart operation will trigger re-authentication.")
 
             return {
                 "success": True,
+                "user_id": user_id,
                 "message": "Authentication token cleared. The next cart operation will open your browser for re-authentication.",
                 "note": "You will need to log in again when you next use cart-related tools.",
             }
 
         except Exception as e:
             if ctx:
-                await ctx.error(f"Error clearing authentication: {str(e)}")
+                await ctx.error(f"[user:{user_id}] Error clearing authentication: {str(e)}")
             return {"success": False, "error": str(e)}

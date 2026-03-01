@@ -2,12 +2,10 @@
 
 import json
 import secrets
-from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from remy_api.auth import get_current_user
 from remy_api.crypto import decrypt_value, encrypt_value
@@ -29,6 +27,17 @@ router = APIRouter()
 async def get_current_user_profile(current_user: User = Depends(get_current_user)):
     """Get current user's profile"""
     return current_user
+
+
+@router.delete("/me")
+async def delete_current_user(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Delete the current user and all related data"""
+
+    # Delete user (cascades to settings, kroger_token)
+    await db.delete(current_user)
+    await db.commit()
+
+    return {"status": "deleted"}
 
 
 @router.get("/me/settings", response_model=UserSettingsResponse)
@@ -186,31 +195,30 @@ async def get_kroger_status(current_user: User = Depends(get_current_user), db: 
     return KrogerStatusResponse(connected=True, expires_at=token.expires_at)
 
 
-# Invite code management (for admin/owner)
 @router.post("/invite-codes", response_model=InviteCodeResponse)
 async def create_invite_code(
     data: InviteCodeCreate | None = None, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
-    """Create a new invite code (any authenticated user can create invites)"""
+    """Create a new invite code"""
 
     code = secrets.token_urlsafe(16)
 
-    invite = InviteCode(code=code, email=data.email if data else None)
+    invite = InviteCode(code=code)
     db.add(invite)
     await db.commit()
     await db.refresh(invite)
 
-    return InviteCodeResponse(code=invite.code, email=invite.email, created_at=invite.created_at, used=False)
+    return InviteCodeResponse(code=invite.code, created_at=invite.created_at, used=False)
 
 
 @router.get("/invite-codes", response_model=list[InviteCodeResponse])
 async def list_invite_codes(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    """List all invite codes (shows which are used)"""
+    """List all invite codes"""
 
     result = await db.execute(select(InviteCode).order_by(InviteCode.created_at.desc()))
     invites = result.scalars().all()
 
     return [
-        InviteCodeResponse(code=inv.code, email=inv.email, created_at=inv.created_at, used=inv.used_by is not None)
+        InviteCodeResponse(code=inv.code, created_at=inv.created_at, used=inv.used)
         for inv in invites
     ]

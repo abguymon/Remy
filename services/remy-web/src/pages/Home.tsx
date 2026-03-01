@@ -2,20 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { recipeApi } from '../api/client'
 import { Search, ChefHat, Check, ShoppingCart, Loader2 } from 'lucide-react'
-
-interface RecipeOption {
-  name: string
-  source: string
-  url?: string
-  image_url?: string
-  slug?: string
-}
-
-interface PlanState {
-  recipe_options: RecipeOption[]
-  pending_cart: Array<{ name: string; quantity?: number; unit?: string }>
-  messages: string[]
-}
+import type { RecipeOption, PlanState, CartItem } from '../types/api'
 
 export default function Home() {
   const queryClient = useQueryClient()
@@ -23,7 +10,7 @@ export default function Home() {
   const [selectedRecipes, setSelectedRecipes] = useState<RecipeOption[]>([])
 
   // Get current plan state
-  const { data: planState, isLoading: loadingPlan } = useQuery<PlanState>({
+  const { data: planState, isLoading: loadingPlan, error } = useQuery<PlanState>({
     queryKey: ['planState'],
     queryFn: recipeApi.getPlanState,
     refetchOnWindowFocus: false,
@@ -48,7 +35,7 @@ export default function Home() {
 
   // Approve cart mutation
   const approveCart = useMutation({
-    mutationFn: (items: unknown[]) => recipeApi.approveCart(items),
+    mutationFn: (items: CartItem[]) => recipeApi.approveCart(items),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['planState'] })
       queryClient.invalidateQueries({ queryKey: ['cart'] })
@@ -89,6 +76,14 @@ export default function Home() {
   const handleApproveCart = () => {
     if (!planState?.pending_cart) return
     approveCart.mutate(planState.pending_cart)
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+        <p className="text-red-600">Failed to load data. Please try again.</p>
+      </div>
+    )
   }
 
   const recipeOptions = planState?.recipe_options || []
@@ -216,7 +211,7 @@ export default function Home() {
                 <span className="text-gray-900">{item.name}</span>
                 {item.quantity && (
                   <span className="text-sm text-gray-500">
-                    {item.quantity} {item.unit}
+                    {item.quantity}
                   </span>
                 )}
               </div>

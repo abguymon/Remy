@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     # JWT Settings
     jwt_secret: str = "CHANGE_ME_IN_PRODUCTION"
     jwt_algorithm: str = "HS256"
-    jwt_expire_hours: int = 24
+    jwt_expire_hours: int = 168  # 7 days
 
     # Database
     database_url: str = "sqlite+aiosqlite:///data/remy.db"

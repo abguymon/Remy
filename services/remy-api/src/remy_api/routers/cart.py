@@ -108,4 +108,8 @@ async def search_products(
     if products is None:
         return {"products": []}
 
-    return {"products": products if isinstance(products, list) else products.get("data", [])}
+    if isinstance(products, list):
+        return {"products": products}
+    if isinstance(products, dict):
+        return {"products": products.get("data", [])}
+    return {"products": []}

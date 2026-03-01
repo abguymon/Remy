@@ -1,6 +1,6 @@
 """Authentication utilities - JWT and password hashing"""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import bcrypt
 from fastapi import Depends, HTTPException, status
@@ -34,17 +34,8 @@ def create_access_token(user_id: str, expires_delta: timedelta | None = None) ->
     if expires_delta is None:
         expires_delta = timedelta(hours=settings.jwt_expire_hours)
 
-    expire = datetime.utcnow() + expires_delta
-    to_encode = {"sub": user_id, "exp": expire, "type": "access"}
-
-    return jwt.encode(to_encode, settings.jwt_secret, algorithm=settings.jwt_algorithm)
-
-
-def create_refresh_token(user_id: str) -> str:
-    """Create a JWT refresh token (longer expiry)"""
-    settings = get_settings()
-    expire = datetime.utcnow() + timedelta(days=30)
-    to_encode = {"sub": user_id, "exp": expire, "type": "refresh"}
+    expire = datetime.now(timezone.utc) + expires_delta
+    to_encode = {"sub": user_id, "exp": expire}
 
     return jwt.encode(to_encode, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
@@ -66,13 +57,6 @@ def decode_token(token: str) -> dict:
 async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> User:
     """Get the current authenticated user from JWT token"""
     payload = decode_token(token)
-
-    if payload.get("type") != "access":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token type",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
 
     user_id = payload.get("sub")
     if user_id is None:
@@ -100,15 +84,3 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
         )
 
     return user
-
-
-async def get_current_user_optional(
-    token: str | None = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)
-) -> User | None:
-    """Get current user if authenticated, None otherwise"""
-    if token is None:
-        return None
-    try:
-        return await get_current_user(token, db)
-    except HTTPException:
-        return None

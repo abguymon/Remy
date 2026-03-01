@@ -118,3 +118,18 @@ class RecipeMixin:
         """
         logger.info({"message": "Creating recipe from URL", "url": url})
         return self._handle_request("POST", "/api/recipes/create/url", json={"url": url, "includeTags": include_tags})
+
+    def delete_recipe(self, slug: str) -> str:
+        """Delete a specific recipe by its slug
+
+        Args:
+            slug: The slug identifier of the recipe to delete
+
+        Returns:
+            Response from the API confirming deletion
+        """
+        if not slug:
+            raise ValueError("Recipe slug cannot be empty")
+
+        logger.info({"message": "Deleting recipe", "slug": slug})
+        return self._handle_request("DELETE", f"/api/recipes/{slug}")

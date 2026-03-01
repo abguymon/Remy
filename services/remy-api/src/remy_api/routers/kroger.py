@@ -2,7 +2,7 @@
 
 import json
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -52,7 +52,7 @@ async def start_kroger_auth(
         state_value = state_match.group(1)
 
         # Clean up expired states (older than 10 minutes)
-        cutoff = datetime.utcnow() - timedelta(minutes=10)
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=10)
         expired = await db.execute(select(OAuthState).where(OAuthState.created_at < cutoff))
         for row in expired.scalars().all():
             await db.delete(row)
@@ -82,7 +82,7 @@ async def kroger_callback(code: str, state: str, db: AsyncSession = Depends(get_
         return RedirectResponse(url=f"{settings.frontend_url}/settings?kroger=error&reason=invalid_state")
 
     # Check expiry (10 minute window)
-    if datetime.utcnow() - oauth_state.created_at > timedelta(minutes=10):
+    if datetime.now(timezone.utc) - oauth_state.created_at > timedelta(minutes=10):
         await db.delete(oauth_state)
         await db.commit()
         return RedirectResponse(url=f"{settings.frontend_url}/settings?kroger=error&reason=expired")
@@ -115,7 +115,7 @@ async def kroger_callback(code: str, state: str, db: AsyncSession = Depends(get_
 
     # Parse expiry
     expires_in = token_data.get("expires_in", 1800)
-    kroger_token.expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+    kroger_token.expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
 
     # Clean up the OAuth state record
     await db.delete(oauth_state)

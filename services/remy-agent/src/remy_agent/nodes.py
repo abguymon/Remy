@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import re
 from typing import Any
@@ -13,6 +14,11 @@ from mcp.client.sse import sse_client
 
 from .state import AgentState
 from .utils import load_pantry_config, load_recipe_sources
+
+logger = logging.getLogger(__name__)
+
+MCP_TIMEOUT = 30  # seconds
+MCP_MAX_RETRIES = 2
 
 MEALIE_MCP_URL = os.getenv("MEALIE_MCP_URL", "http://localhost:8000/sse")
 KROGER_MCP_URL = os.getenv("KROGER_MCP_URL", "http://localhost:8001/sse")
@@ -83,7 +89,7 @@ async def fetch_og_image(url: str, timeout: float = 5.0) -> str | None:
                     return og_match.group(1)
 
     except Exception as e:
-        print(f"[og:image] Failed to fetch {url}: {e}")
+        logger.debug("Failed to fetch og:image from %s: %s", url, e)
     return None
 
 
@@ -93,7 +99,7 @@ async def fetch_thumbnails_parallel(results: list[dict[str, Any]]) -> list[dict[
         return results
 
     urls = [r["url"] for r in results]
-    print(f"[Thumbnails] Fetching og:image for {len(urls)} URLs in parallel...")
+    logger.debug("Fetching og:image for %d URLs in parallel...", len(urls))
 
     thumbnails = await asyncio.gather(*[fetch_og_image(url) for url in urls])
 
@@ -102,7 +108,7 @@ async def fetch_thumbnails_parallel(results: list[dict[str, Any]]) -> list[dict[
             results[i]["image_url"] = thumbnail
 
     found = sum(1 for t in thumbnails if t)
-    print(f"[Thumbnails] Found {found}/{len(urls)} og:image thumbnails")
+    logger.debug("Found %d/%d og:image thumbnails", found, len(urls))
 
     return results
 
@@ -137,24 +143,59 @@ Return ONLY the JSON array of titles to keep. No explanation."""
         valid_titles_lower = [t.lower() for t in valid_titles]
 
         filtered = [r for r in results if r["name"].lower() in valid_titles_lower]
-        print(f"[Web Filter] Kept {len(filtered)}/{len(results)} results after filtering roundups")
+        logger.info("Web filter kept %d/%d results after filtering roundups", len(filtered), len(results))
         return filtered
     except Exception as e:
-        print(f"[Web Filter] Error filtering results: {e}")
+        logger.warning("Error filtering web results: %s", e)
         return results
 
 
+async def _call_mcp_tool_inner(url: str, tool_name: str, arguments: dict[str, Any] | None = None) -> Any:
+    """Inner function that makes the actual MCP call via SSE transport."""
+    async with sse_client(url) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool(tool_name, arguments)
+            return result
+
+
 async def call_mcp_tool(url: str, tool_name: str, arguments: dict[str, Any] | None = None) -> Any:
-    """Helper to call an MCP tool via SSE"""
-    try:
-        async with sse_client(url) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await session.call_tool(tool_name, arguments)
-                return result
-    except Exception as e:
-        print(f"Error calling {tool_name} at {url}: {e}")
-        return None
+    """Helper to call an MCP tool via SSE with timeout and retry logic."""
+    last_error: Exception | None = None
+
+    for attempt in range(MCP_MAX_RETRIES + 1):
+        try:
+            result = await asyncio.wait_for(
+                _call_mcp_tool_inner(url, tool_name, arguments),
+                timeout=MCP_TIMEOUT,
+            )
+            return result
+        except asyncio.TimeoutError:
+            logger.warning(
+                "MCP call timed out: %s/%s (attempt %d/%d)",
+                url, tool_name, attempt + 1, MCP_MAX_RETRIES + 1,
+            )
+            last_error = TimeoutError(
+                f"Timeout calling {tool_name} after {MCP_TIMEOUT}s"
+            )
+        except (ConnectionError, OSError) as e:
+            logger.warning(
+                "MCP connection error: %s/%s (attempt %d/%d): %s",
+                url, tool_name, attempt + 1, MCP_MAX_RETRIES + 1, e,
+            )
+            last_error = e
+            if attempt < MCP_MAX_RETRIES:
+                await asyncio.sleep(0.5 * (attempt + 1))  # brief backoff
+        except Exception as e:
+            logger.error("MCP call failed: %s/%s: %s", url, tool_name, e)
+            return None
+
+    # All retries exhausted
+    logger.error(
+        "MCP call failed after %d attempts: %s/%s: %s",
+        MCP_MAX_RETRIES + 1, url, tool_name, last_error,
+    )
+    return None
 
 
 def _extract_urls(text: str) -> list[str]:
@@ -222,7 +263,7 @@ async def search_recipes_node(state: AgentState) -> dict[str, Any]:
             content = response.content.replace("```json", "").replace("```", "").strip()
             target_names = json.loads(content)
         except Exception:
-            print("Failed to parse recipe names")
+            logger.warning("Failed to parse recipe names from LLM response")
             return {}
 
     if not target_names:
@@ -244,6 +285,24 @@ async def search_recipes_node(state: AgentState) -> dict[str, Any]:
         recipe_options.extend(mealie_results)
         recipe_options.extend(favorites_results)
         recipe_options.extend(web_results)
+
+    # Deduplicate by URL and name (prefer earlier sources: mealie > favorites > web)
+    seen_urls: set[str] = set()
+    seen_names: set[str] = set()
+    deduped = []
+    for opt in recipe_options:
+        url = opt.get("url", "")
+        name_lower = opt.get("name", "").lower().strip()
+        if url and url in seen_urls:
+            continue
+        if name_lower and name_lower in seen_names:
+            continue
+        if url:
+            seen_urls.add(url)
+        if name_lower:
+            seen_names.add(name_lower)
+        deduped.append(opt)
+    recipe_options = deduped
 
     if not recipe_options:
         return {
@@ -333,7 +392,7 @@ Return ONLY the JSON array of matching recipe names, or [] if none match. No exp
                         }
                     )
     except Exception as e:
-        print(f"Error searching Mealie for {recipe_name}: {e}")
+        logger.error("Error searching Mealie for %s: %s", recipe_name, e)
     return results
 
 
@@ -354,7 +413,7 @@ async def _search_favorite_sites(recipe_name: str) -> list[dict[str, Any]]:
 
         try:
             search_query = f"site:{domain} {recipe_name} recipe"
-            print(f"[Favorite Sites] Searching {site_name}: {search_query}")
+            logger.debug("Searching favorite site %s: %s", site_name, search_query)
             search_results = get_search_tool().run(search_query)
 
             if not search_results:
@@ -380,9 +439,9 @@ async def _search_favorite_sites(recipe_name: str) -> list[dict[str, Any]]:
                     }
                 )
 
-            print(f"[Favorite Sites] Found {min(len(links), 2)} results from {site_name}")
+            logger.debug("Found %d results from favorite site %s", min(len(links), 2), site_name)
         except Exception as e:
-            print(f"[Favorite Sites] Error searching {site_name}: {e}")
+            logger.warning("Error searching favorite site %s: %s", site_name, e)
 
     # Filter out roundups and listicles, then fetch thumbnails
     if results:
@@ -397,12 +456,12 @@ async def _search_web(recipe_name: str) -> list[dict[str, Any]]:
     results = []
     try:
         search_query = f"{recipe_name} recipe"
-        print(f"[Web Search] Searching for: {search_query}")
+        logger.info("Web search: %s", search_query)
         search_results = get_search_tool().run(search_query)
-        print(f"[Web Search] Raw results length: {len(search_results) if search_results else 0}")
+        logger.debug("Web search raw results length: %d", len(search_results) if search_results else 0)
 
         if not search_results:
-            print("[Web Search] No results from DuckDuckGo")
+            logger.info("No web search results from DuckDuckGo")
             return results
 
         # Parse the DuckDuckGoSearchResults format: "snippet: ..., title: ..., link: ..."
@@ -411,7 +470,7 @@ async def _search_web(recipe_name: str) -> list[dict[str, Any]]:
         titles = re.findall(r"title:\s*([^,]+),\s*link:", search_results)
         snippets = re.findall(r"snippet:\s*([^,]+(?:,(?!\s*title:)[^,]*)*),\s*title:", search_results)
 
-        print(f"[Web Search] Found {len(links)} links, {len(titles)} titles")
+        logger.debug("Web search found %d links, %d titles", len(links), len(titles))
 
         for i, link in enumerate(links[:5]):
             title = titles[i] if i < len(titles) else recipe_name
@@ -428,7 +487,7 @@ async def _search_web(recipe_name: str) -> list[dict[str, Any]]:
                 }
             )
 
-        print(f"[Web Search] Parsed {len(results)} web recipe options")
+        logger.info("Parsed %d web recipe options", len(results))
 
         # Filter out roundups and listicles
         results = await filter_web_results(results, recipe_name)
@@ -437,10 +496,7 @@ async def _search_web(recipe_name: str) -> list[dict[str, Any]]:
         results = await fetch_thumbnails_parallel(results)
 
     except Exception as e:
-        print(f"[Web Search] Error searching web for {recipe_name}: {e}")
-        import traceback
-
-        traceback.print_exc()
+        logger.error("Error searching web for %s: %s", recipe_name, e, exc_info=True)
     return results
 
 
@@ -490,7 +546,7 @@ async def _fetch_mealie_recipe(slug: str) -> dict[str, Any] | None:
         if detail_result and not detail_result.isError:
             return json.loads(detail_result.content[0].text)
     except Exception as e:
-        print(f"Error fetching Mealie recipe {slug}: {e}")
+        logger.error("Error fetching Mealie recipe %s: %s", slug, e)
     return None
 
 
@@ -513,10 +569,10 @@ async def _import_web_recipe(option: dict[str, Any]) -> dict[str, Any] | None:
             if slug:
                 return await _fetch_mealie_recipe(slug)
 
-        print(f"Could not import recipe from {url}")
+        logger.warning("Could not import recipe from %s", url)
         return None
     except Exception as e:
-        print(f"Error importing web recipe from {option.get('url')}: {e}")
+        logger.error("Error importing web recipe from %s: %s", option.get('url'), e)
     return None
 
 
@@ -597,7 +653,7 @@ Return ONLY the JSON object."""
         content = response.content.strip().replace("```json", "").replace("```", "").strip()
         return json.loads(content)
     except Exception as e:
-        print(f"[batch_extract] Error: {e}, falling back to individual extraction")
+        logger.warning("Batch extract error: %s, falling back to individual extraction", e)
         return {}
 
 
@@ -607,7 +663,7 @@ async def _process_cart_item(
 ) -> list[dict[str, Any]]:
     """Process a single cart item - search and add to cart. Returns a list (may be multiple products)."""
     query = item["original"]
-    print(f"[process_cart_item] Processing: {query}", flush=True)
+    logger.info("Processing cart item: %s", query)
 
     # Use pre-extracted products if available, otherwise extract individually
     if pre_extracted:
@@ -703,7 +759,7 @@ async def _process_cart_item(
                     {"search_term": p.get("product", query), "quantity": max(1, int(p.get("quantity", 1)))}
                 )
         except Exception as e:
-            print(f"[Order] Failed to parse '{query}': {e}")
+            logger.warning("Failed to parse product from '%s': %s", query, e)
             products_to_order = [{"search_term": query, "quantity": 1}]
 
     # Process each product
@@ -717,11 +773,12 @@ async def _process_cart_item(
         if location_id:
             search_args["location_id"] = location_id
 
-        print(f"[process_cart_item] Searching for: {search_term} with args: {search_args}", flush=True)
+        logger.debug("Searching Kroger for: %s with args: %s", search_term, search_args)
         search_res = await call_mcp_tool(KROGER_MCP_URL, "search_products", search_args)
-        print(
-            f"[process_cart_item] Search result: {search_res is not None}, isError: {search_res.isError if search_res else 'N/A'}",
-            flush=True,
+        logger.debug(
+            "Kroger search result: found=%s, isError=%s",
+            search_res is not None,
+            search_res.isError if search_res else "N/A",
         )
         if not search_res or search_res.isError:
             results.append({"item": search_term, "quantity": quantity, "status": "search_failed"})
@@ -806,9 +863,9 @@ Reply with ONLY the number (1-{min(8, len(products))}) of the best match, nothin
                 fulfillment_info = product.get("item", {}).get("fulfillment", {})
                 is_available_for_fulfillment = fulfillment_info.get(fulfillment_filter.lower()) is not False
 
-                print(
-                    f"[process_cart_item] Checking: {product['description']}, stock: {stock_level}, fulfillment: {fulfillment_info}",
-                    flush=True,
+                logger.debug(
+                    "Checking product: %s, stock: %s, fulfillment: %s",
+                    product['description'], stock_level, fulfillment_info,
                 )
 
                 if not is_available_for_fulfillment:
@@ -841,19 +898,20 @@ Reply with ONLY the number (1-{min(8, len(products))}) of the best match, nothin
                 continue
 
             upc = selected_product["upc"]
-            print(
-                f"[process_cart_item] Selected: {selected_product['description']}, UPC: {upc}, substitute: {is_substitute}",
-                flush=True,
+            logger.info(
+                "Selected product: %s, UPC: %s, substitute: %s",
+                selected_product['description'], upc, is_substitute,
             )
 
             # Add to Cart with correct quantity
-            print(f"[process_cart_item] Adding to cart: {upc} x{quantity}", flush=True)
+            logger.info("Adding to cart: %s x%d", upc, quantity)
             add_res = await call_mcp_tool(
                 KROGER_MCP_URL, "add_items_to_cart", {"product_id": upc, "quantity": quantity, "modality": modality}
             )
-            print(
-                f"[process_cart_item] Add result: {add_res is not None}, isError: {add_res.isError if add_res else 'N/A'}",
-                flush=True,
+            logger.debug(
+                "Add to cart result: found=%s, isError=%s",
+                add_res is not None,
+                add_res.isError if add_res else "N/A",
             )
 
             status = "failed"
@@ -901,18 +959,18 @@ async def execute_order_node(state: AgentState) -> dict[str, Any]:
     modality = state.get("fulfillment_method", "PICKUP")
     location_id = state.get("preferred_store_id")
 
-    print(
-        f"[execute_order] Starting with {len(approved_cart)} items, modality={modality}, location={location_id}",
-        flush=True,
+    logger.info(
+        "Starting order execution with %d items, modality=%s, location=%s",
+        len(approved_cart), modality, location_id,
     )
 
     # Map modality to Kroger fulfillment filter
     fulfillment_filter = "pickup" if modality == "PICKUP" else "delivery"
 
     # Batch extract all product names/quantities in one LLM call (faster than individual calls)
-    print("[execute_order] Batch extracting product names...", flush=True)
+    logger.info("Batch extracting product names...")
     extracted_products = await _batch_extract_products(approved_cart)
-    print(f"[execute_order] Extracted {len(extracted_products)} items", flush=True)
+    logger.info("Extracted %d items from batch", len(extracted_products))
 
     # Process all items in parallel, passing pre-extracted data
     tasks = []

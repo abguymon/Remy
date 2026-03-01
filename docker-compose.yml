@@ -1,11 +1,9 @@
-version: '3.8'
-
 networks:
-  remy-net:
+  t2_proxy:
     external: true
+  remy-net:
 
 services:
-  # Mealie service - uses the base provided mealie.docker-compose.yml content
   mealie:
     image: ghcr.io/mealie-recipes/mealie:latest
     container_name: mealie
@@ -13,7 +11,7 @@ services:
     ports:
       - "9925:9000"
     environment:
-        OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
     deploy:
       resources:
         limits:
@@ -30,8 +28,6 @@ services:
     environment:
       MEALIE_BASE_URL: ${MEALIE_BASE_URL}
       MEALIE_API_KEY: ${MEALIE_API_KEY}
-    ports:
-      - "8000:8000"
     networks:
       - remy-net
 
@@ -45,8 +41,6 @@ services:
       KROGER_REDIRECT_URI: ${KROGER_REDIRECT_URI}
     volumes:
       - kroger-data:/app/data
-    ports:
-      - "8001:8000" # Expose on a different port to avoid conflict with mealie-mcp-server
     networks:
       - remy-net
 
@@ -62,8 +56,6 @@ services:
       MEALIE_EXTERNAL_URL: http://localhost:9925
     volumes:
       - remy-data:/app/data
-    ports:
-      - "8501:8501"
     depends_on:
       - mealie-mcp-server
       - kroger-mcp
@@ -72,7 +64,6 @@ services:
     profiles:
       - legacy
 
-  # New FastAPI backend
   remy-api:
     build: ./services/remy-api
     container_name: remy-api
@@ -85,20 +76,17 @@ services:
       MEALIE_MCP_URL: http://mealie-mcp-server:8000/sse
       MEALIE_EXTERNAL_URL: http://localhost:9925
       KROGER_REDIRECT_URI: ${KROGER_REDIRECT_URI:-http://localhost:8080/kroger/callback}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      FRONTEND_URL: ${FRONTEND_URL:-https://remy.$DOMAINNAME}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
       DATABASE_URL: sqlite+aiosqlite:///data/remy.db
     volumes:
       - remy-api-data:/app/data
-    ports:
-      - "8080:8080"
     depends_on:
       - mealie-mcp-server
       - kroger-mcp
     networks:
       - remy-net
 
-  # New React frontend
   remy-web:
     build:
       context: ./services/remy-web
@@ -106,12 +94,22 @@ services:
         VITE_API_URL: /api
     container_name: remy-web
     restart: always
-    ports:
-      - "3000:80"
     depends_on:
       - remy-api
     networks:
+      - t2_proxy
       - remy-net
+    labels:
+      - "traefik.enable=true"
+      ## Router
+      - "traefik.http.routers.remy-rtr.entrypoints=https"
+      - "traefik.http.routers.remy-rtr.rule=Host(`remy.$DOMAINNAME`)"
+      - "traefik.http.routers.remy-rtr.tls=true"
+      ## Middleware - no auth (app handles its own)
+      - "traefik.http.routers.remy-rtr.middlewares=chain-no-auth@file"
+      ## Service
+      - "traefik.http.routers.remy-rtr.service=remy-svc"
+      - "traefik.http.services.remy-svc.loadbalancer.server.port=80"
 
 volumes:
   mealie-data:

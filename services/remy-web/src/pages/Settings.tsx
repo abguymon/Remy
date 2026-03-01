@@ -3,20 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { userApi, krogerApi } from '../api/client'
 import { Settings as SettingsIcon, Link, Unlink, MapPin, Loader2, Check, Plus, X } from 'lucide-react'
-
-interface UserSettings {
-  pantry_items: string[]
-  store_location_id?: string
-  store_name?: string
-  zip_code?: string
-  fulfillment_method: string
-  mealie_connected: boolean
-}
-
-interface KrogerStatus {
-  connected: boolean
-  expires_at?: string
-}
+import type { UserSettings, KrogerStatus, StoreLocation } from '../types/api'
 
 export default function Settings() {
   const queryClient = useQueryClient()
@@ -44,7 +31,7 @@ export default function Settings() {
     }
   }, [searchParams, setSearchParams, queryClient])
 
-  const { data: settings, isLoading: loadingSettings } = useQuery<UserSettings>({
+  const { data: settings, isLoading: loadingSettings, error: settingsError } = useQuery<UserSettings>({
     queryKey: ['settings'],
     queryFn: userApi.getSettings,
   })
@@ -54,7 +41,7 @@ export default function Settings() {
     queryFn: krogerApi.getStatus,
   })
 
-  const { data: stores } = useQuery({
+  const { data: stores } = useQuery<{ stores: StoreLocation[] }>({
     queryKey: ['stores', zipCode],
     queryFn: () => krogerApi.searchStores(zipCode),
     enabled: zipCode.length === 5,
@@ -113,6 +100,14 @@ export default function Settings() {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
+      </div>
+    )
+  }
+
+  if (settingsError) {
+    return (
+      <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+        <p className="text-red-600">Failed to load settings. Please try again.</p>
       </div>
     )
   }
@@ -191,9 +186,9 @@ export default function Settings() {
           />
         </div>
 
-        {stores?.stores?.length > 0 && (
+        {stores?.stores && stores.stores.length > 0 && (
           <div className="space-y-2">
-            {stores.stores.map((store: { locationId: string; name?: string; chain?: string; address?: { addressLine1?: string } }) => (
+            {stores.stores.map((store: StoreLocation) => (
               <button
                 key={store.locationId}
                 onClick={() => selectStore.mutate(store.locationId)}
