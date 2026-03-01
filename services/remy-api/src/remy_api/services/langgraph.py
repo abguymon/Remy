@@ -11,7 +11,7 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph import END, START, StateGraph
 
 from remy_api.config import get_settings
-from remy_api.services.mcp_client import call_mealie_tool, parse_mcp_result
+from remy_api.services.mcp_client import call_kroger_tool, call_mealie_tool, parse_mcp_result
 
 
 class WorkflowState(TypedDict):
@@ -205,17 +205,93 @@ async def filter_ingredients_node(state: WorkflowState) -> dict[str, Any]:
 
 
 async def execute_order_node(state: WorkflowState) -> dict[str, Any]:
-    """Add approved items to Kroger cart"""
+    """Add approved items to Kroger cart via Kroger MCP"""
     approved_cart = state.get("approved_cart", [])
+    user_id = state.get("user_id")
+    preferred_store_id = state.get("preferred_store_id")
 
     if not approved_cart:
         return {"messages": [AIMessage(content="No items approved. Cart not updated.")]}
 
-    # TODO: Call Kroger MCP to add items to cart
-    # For now, return a placeholder result
+    added_items = []
+    failed_items = []
+
+    for item in approved_cart:
+        ingredient_name = item.get("name", "")
+        quantity = item.get("quantity") or 1
+
+        # Ensure quantity is an integer
+        try:
+            quantity = max(1, int(float(quantity)))
+        except (ValueError, TypeError):
+            quantity = 1
+
+        # Search for the product on Kroger
+        search_args = {"term": ingredient_name, "limit": 5}
+        if preferred_store_id:
+            search_args["location_id"] = preferred_store_id
+
+        search_result = await call_kroger_tool("search_products", search_args, user_id=user_id)
+        products = parse_mcp_result(search_result)
+
+        if not products:
+            failed_items.append({"name": ingredient_name, "reason": "no search results"})
+            continue
+
+        # Handle both list and dict responses
+        product_list = products if isinstance(products, list) else products.get("data", products.get("items", []))
+
+        if not product_list:
+            failed_items.append({"name": ingredient_name, "reason": "no products found"})
+            continue
+
+        # Take the first result
+        product = product_list[0]
+        product_id = product.get("productId") or product.get("product_id") or product.get("id")
+
+        if not product_id:
+            failed_items.append({"name": ingredient_name, "reason": "no product ID in result"})
+            continue
+
+        # Add to cart
+        add_result = await call_kroger_tool(
+            "add_to_cart",
+            {"product_id": product_id, "quantity": quantity},
+            user_id=user_id,
+        )
+
+        if add_result is not None and not (hasattr(add_result, "isError") and add_result.isError):
+            added_items.append({
+                "name": ingredient_name,
+                "product_id": product_id,
+                "product_name": product.get("description") or product.get("name", ingredient_name),
+                "quantity": quantity,
+            })
+        else:
+            failed_items.append({"name": ingredient_name, "reason": "failed to add to cart"})
+
+    # Build result summary
+    order_result = {
+        "status": "completed",
+        "items_added": len(added_items),
+        "items_failed": len(failed_items),
+        "added": added_items,
+        "failed": failed_items,
+    }
+
+    # Build user-friendly message
+    parts = []
+    if added_items:
+        parts.append(f"Added {len(added_items)} items to your Kroger cart.")
+    if failed_items:
+        failed_names = ", ".join(f["name"] for f in failed_items)
+        parts.append(f"Could not find matches for: {failed_names}.")
+
+    message = " ".join(parts) if parts else "No items were processed."
+
     return {
-        "order_result": {"status": "success", "items_added": len(approved_cart)},
-        "messages": [AIMessage(content=f"Added {len(approved_cart)} items to your Kroger cart!")],
+        "order_result": order_result,
+        "messages": [AIMessage(content=message)],
     }
 
 

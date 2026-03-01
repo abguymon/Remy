@@ -69,6 +69,16 @@ class KrogerToken(Base):
     user: Mapped["User"] = relationship(back_populates="kroger_token")
 
 
+class OAuthState(Base):
+    """Temporary OAuth state mapping for Kroger callback"""
+
+    __tablename__ = "oauth_states"
+
+    state: Mapped[str] = mapped_column(String(255), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class InviteCode(Base):
     """Invite codes for registration"""
 

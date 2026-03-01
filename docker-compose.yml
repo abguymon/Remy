@@ -84,6 +84,9 @@ services:
       KROGER_MCP_URL: http://kroger-mcp:8000/sse
       MEALIE_MCP_URL: http://mealie-mcp-server:8000/sse
       MEALIE_EXTERNAL_URL: http://localhost:9925
+      KROGER_REDIRECT_URI: ${KROGER_REDIRECT_URI:-http://localhost:8080/kroger/callback}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
       DATABASE_URL: sqlite+aiosqlite:///data/remy.db
     volumes:
       - remy-api-data:/app/data

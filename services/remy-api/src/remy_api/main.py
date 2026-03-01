@@ -13,6 +13,16 @@ from remy_api.database import init_db
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler"""
+    settings = get_settings()
+
+    # Validate JWT secret is not the default in non-debug mode
+    if not settings.debug and settings.jwt_secret == "CHANGE_ME_IN_PRODUCTION":
+        raise RuntimeError(
+            "JWT_SECRET is still set to the default value. "
+            "Generate a secure secret with: python -c \"import secrets; print(secrets.token_hex(32))\" "
+            "and set it in your .env file. Set DEBUG=true to bypass this check in development."
+        )
+
     # Startup
     os.makedirs("data", exist_ok=True)
     os.makedirs("data/checkpoints", exist_ok=True)

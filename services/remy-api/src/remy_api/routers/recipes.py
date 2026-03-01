@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from remy_api.auth import get_current_user
+from remy_api.crypto import decrypt_value
 from remy_api.database import User, UserSettings, get_db
 from remy_api.models import RecipeOption, RecipePlanRequest, RecipeSearchRequest
 from remy_api.services.langgraph import run_workflow
@@ -24,7 +25,7 @@ async def get_user_context(user: User, db: AsyncSession) -> tuple[str | None, li
     pantry_items = []
 
     if settings:
-        mealie_api_key = settings.mealie_api_key
+        mealie_api_key = decrypt_value(settings.mealie_api_key) if settings.mealie_api_key else None
         if settings.pantry_items:
             pantry_items = json.loads(settings.pantry_items)
 

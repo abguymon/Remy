@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from remy_api.auth import get_current_user
+from remy_api.crypto import decrypt_value, encrypt_value
 from remy_api.database import InviteCode, KrogerToken, User, UserSettings, get_db
 from remy_api.models import (
     InviteCodeCreate,
@@ -48,6 +49,13 @@ async def get_user_settings(current_user: User = Depends(get_current_user), db: 
     pantry_items = json.loads(settings.pantry_items) if settings.pantry_items else []
     recipe_sources = json.loads(settings.recipe_sources) if settings.recipe_sources else []
 
+    # Decrypt mealie_api_key for display (truncated)
+    has_mealie_key = settings.mealie_api_key is not None
+    mealie_display = None
+    if has_mealie_key:
+        decrypted = decrypt_value(settings.mealie_api_key)
+        mealie_display = decrypted[:8] + "..."
+
     return UserSettingsResponse(
         pantry_items=pantry_items,
         recipe_sources=recipe_sources,
@@ -55,8 +63,8 @@ async def get_user_settings(current_user: User = Depends(get_current_user), db: 
         store_name=settings.store_name,
         zip_code=settings.zip_code,
         fulfillment_method=settings.fulfillment_method,
-        mealie_api_key=settings.mealie_api_key[:8] + "..." if settings.mealie_api_key else None,
-        mealie_connected=settings.mealie_api_key is not None,
+        mealie_api_key=mealie_display,
+        mealie_connected=has_mealie_key,
     )
 
 
@@ -99,6 +107,12 @@ async def update_user_settings(
     pantry_items = json.loads(settings.pantry_items) if settings.pantry_items else []
     recipe_sources = json.loads(settings.recipe_sources) if settings.recipe_sources else []
 
+    has_mealie_key = settings.mealie_api_key is not None
+    mealie_display = None
+    if has_mealie_key:
+        decrypted = decrypt_value(settings.mealie_api_key)
+        mealie_display = decrypted[:8] + "..."
+
     return UserSettingsResponse(
         pantry_items=pantry_items,
         recipe_sources=recipe_sources,
@@ -106,8 +120,8 @@ async def update_user_settings(
         store_name=settings.store_name,
         zip_code=settings.zip_code,
         fulfillment_method=settings.fulfillment_method,
-        mealie_api_key=settings.mealie_api_key[:8] + "..." if settings.mealie_api_key else None,
-        mealie_connected=settings.mealie_api_key is not None,
+        mealie_api_key=mealie_display,
+        mealie_connected=has_mealie_key,
     )
 
 
@@ -124,7 +138,7 @@ async def connect_mealie(
         settings = UserSettings(user_id=current_user.id)
         db.add(settings)
 
-    settings.mealie_api_key = data.api_key
+    settings.mealie_api_key = encrypt_value(data.api_key)
 
     await db.commit()
     await db.refresh(settings)
@@ -140,8 +154,8 @@ async def connect_mealie(
         store_name=settings.store_name,
         zip_code=settings.zip_code,
         fulfillment_method=settings.fulfillment_method,
-        mealie_api_key=settings.mealie_api_key[:8] + "..." if settings.mealie_api_key else None,
-        mealie_connected=settings.mealie_api_key is not None,
+        mealie_api_key=data.api_key[:8] + "...",
+        mealie_connected=True,
     )
 
 

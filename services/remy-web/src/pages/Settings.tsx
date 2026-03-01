@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import { userApi, krogerApi } from '../api/client'
 import { Settings as SettingsIcon, Link, Unlink, MapPin, Loader2, Check, Plus, X } from 'lucide-react'
 
@@ -19,9 +20,29 @@ interface KrogerStatus {
 
 export default function Settings() {
   const queryClient = useQueryClient()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [mealieKey, setMealieKey] = useState('')
   const [zipCode, setZipCode] = useState('')
   const [newPantryItem, setNewPantryItem] = useState('')
+  const [krogerMessage, setKrogerMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  // Handle OAuth return from Kroger
+  useEffect(() => {
+    const krogerParam = searchParams.get('kroger')
+    if (krogerParam === 'connected') {
+      setKrogerMessage({ type: 'success', text: 'Successfully connected to Kroger!' })
+      queryClient.invalidateQueries({ queryKey: ['krogerStatus'] })
+      // Clean up the URL
+      searchParams.delete('kroger')
+      setSearchParams(searchParams, { replace: true })
+    } else if (krogerParam === 'error') {
+      const reason = searchParams.get('reason') || 'unknown'
+      setKrogerMessage({ type: 'error', text: `Failed to connect Kroger: ${reason}` })
+      searchParams.delete('kroger')
+      searchParams.delete('reason')
+      setSearchParams(searchParams, { replace: true })
+    }
+  }, [searchParams, setSearchParams, queryClient])
 
   const { data: settings, isLoading: loadingSettings } = useQuery<UserSettings>({
     queryKey: ['settings'],
@@ -106,6 +127,18 @@ export default function Settings() {
       {/* Kroger Connection */}
       <section className="bg-white rounded-lg border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Kroger Account</h2>
+
+        {krogerMessage && (
+          <div
+            className={`mb-4 p-3 rounded-lg text-sm ${
+              krogerMessage.type === 'success'
+                ? 'bg-green-50 text-green-700 border border-green-200'
+                : 'bg-red-50 text-red-700 border border-red-200'
+            }`}
+          >
+            {krogerMessage.text}
+          </div>
+        )}
 
         {krogerStatus?.connected ? (
           <div className="flex items-center justify-between">

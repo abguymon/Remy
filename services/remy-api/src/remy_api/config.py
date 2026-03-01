@@ -1,6 +1,5 @@
 """Application configuration"""
 
-import os
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings
@@ -26,6 +25,16 @@ class Settings(BaseSettings):
     kroger_mcp_url: str = "http://kroger-mcp:8000/sse"
     mealie_mcp_url: str = "http://mealie-mcp-server:8000/sse"
     mealie_external_url: str = "http://localhost:9925"
+
+    # Kroger OAuth
+    kroger_redirect_uri: str = "http://localhost:8080/kroger/callback"
+
+    # Frontend URL (for post-OAuth redirect)
+    frontend_url: str = "http://localhost:3000"
+
+    # Encryption key for sensitive data at rest (Fernet key)
+    # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    encryption_key: str = ""
 
     # OpenAI
     openai_api_key: str = ""
