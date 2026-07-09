@@ -22,8 +22,9 @@ services:
       # Seed sources for new users' default settings (PRD §6, FR-23/FR-24).
       PANTRY_FILE: /app/seed/pantry.yaml
       RECIPE_SOURCES_FILE: /app/seed/recipe_sources.yaml
-    ports:
-      - "8080:8080"
+    # No host port: remy-web's nginx proxies /api/* internally and Traefik
+    # handles ingress (host 8080 belongs to Traefik). For direct-API dev use
+    # uvicorn (see README).
     volumes:
       # Shared data volume: SQLite DB + recipe images
       - ./data:/app/data
