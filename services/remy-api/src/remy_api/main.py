@@ -17,7 +17,8 @@ from remy_api import __version__
 from remy_api.config import get_settings
 from remy_api.db import dispose_engine, init_db
 from remy_api.errors import register_error_handlers
-from remy_api.routers import auth, users
+from remy_api.kroger import close_client, register_kroger_error_handler
+from remy_api.routers import auth, kroger, users
 
 # Fail closed: importing the app validates required secrets. A misconfigured
 # container exits here with a clear ConfigError rather than starting.
@@ -30,6 +31,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # to add migrations later).
     await init_db()
     yield
+    await close_client()
     await dispose_engine()
 
 
@@ -44,8 +46,10 @@ app.add_middleware(
 )
 
 register_error_handlers(app)
+register_kroger_error_handler(app)
 app.include_router(auth.router)
 app.include_router(users.router)
+app.include_router(kroger.router)
 
 
 @app.get("/health")
