@@ -90,6 +90,11 @@ class Settings(BaseSettings):
     mcp_allowed_hosts: list[str] = []
     mcp_allowed_origins: list[str] = []
 
+    # --- Web app origin ---
+    # Empty = relative OAuth-return redirects (single-origin prod behind Traefik).
+    # Set to e.g. http://localhost:3000 in split-origin dev.
+    web_app_url: str = ""
+
     # --- CORS (dev) ---
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
 

@@ -23,6 +23,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import delete, select
 
+from remy_api.config import get_settings
 from remy_api.deps import CurrentUser, SessionDep
 from remy_api.errors import NotFoundError
 from remy_api.kroger import (
@@ -39,13 +40,12 @@ from remy_api.models import FulfillmentMethod, KrogerToken, OAuthState, UserSett
 
 router = APIRouter(prefix="/kroger", tags=["kroger"])
 
-# Where the browser lands after the OAuth round-trip. Relative so it resolves to
-# the deployed origin (Traefik serves web + /api on one host, PRD §8).
-_SETTINGS_PATH = "/settings"
-
-
 def _settings_redirect(**params: str) -> RedirectResponse:
-    return RedirectResponse(url=f"{_SETTINGS_PATH}?{urlencode(params)}", status_code=status.HTTP_302_FOUND)
+    # Where the browser lands after the OAuth round-trip. Relative by default so
+    # it resolves to the deployed origin (Traefik serves web + /api on one host,
+    # PRD §8); WEB_APP_URL overrides for split-origin dev (web :3000, api :8080).
+    base = get_settings().web_app_url.rstrip("/")
+    return RedirectResponse(url=f"{base}/settings?{urlencode(params)}", status_code=status.HTTP_302_FOUND)
 
 
 class AuthUrlResponse(BaseModel):
