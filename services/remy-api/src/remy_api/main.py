@@ -20,7 +20,7 @@ from remy_api.db import dispose_engine, init_db
 from remy_api.errors import register_error_handlers
 from remy_api.kroger import close_client, register_kroger_error_handler
 from remy_api.llm.errors import LLMError
-from remy_api.routers import auth, kroger, plan, recipes, users
+from remy_api.routers import auth, kroger, orders, plan, recipes, users
 from remy_api.search.base import SearchError
 
 # Fail closed: importing the app validates required secrets. A misconfigured
@@ -91,6 +91,7 @@ app.include_router(users.router)
 app.include_router(kroger.router)
 app.include_router(recipes.router)
 app.include_router(plan.router)
+app.include_router(orders.router)
 
 
 @app.get("/health")

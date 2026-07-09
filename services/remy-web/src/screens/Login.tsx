@@ -24,7 +24,15 @@ export default function Login() {
       setToken(res.access_token)
       navigate('/', { replace: true })
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong. Try again.')
+      if (err instanceof ApiError) {
+        setError(
+          err.status === 401
+            ? "That username or password didn't match."
+            : err.message,
+        )
+      } else {
+        setError('Something went wrong. Try again.')
+      }
     }
   }
 

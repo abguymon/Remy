@@ -9,6 +9,19 @@ export function pluralize(n: number, singular: string, plural?: string): string 
   return `${n} ${n === 1 ? singular : (plural ?? `${singular}s`)}`
 }
 
+// Short "Mon D" date, e.g. "Jul 8" — used for order history + last-cooked.
+export function shortDate(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+// "Cooked Jul 8" if a last-cooked stamp exists, otherwise "New".
+export function cookedLabel(iso: string | null | undefined): string {
+  return iso ? `Cooked ${shortDate(iso)}` : 'New'
+}
+
 // Kroger stock levels → the four review pills. Anything unknown reads as
 // "stock unknown" rather than pretending it's in stock (honesty, FR-16).
 export function stockLabel(level: string | null | undefined): string {

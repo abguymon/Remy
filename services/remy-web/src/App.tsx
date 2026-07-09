@@ -1,7 +1,10 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import AppShell from './components/AppShell'
 import Login from './screens/Login'
-import Stub from './screens/Stub'
+import Cookbook from './screens/Cookbook'
+import RecipeDetail from './screens/RecipeDetail'
+import CartRecord from './screens/CartRecord'
+import Settings from './screens/Settings'
 import NotFound from './screens/NotFound'
 import PlanFlow from './screens/plan/PlanFlow'
 import { useAuth } from './stores/auth'
@@ -27,9 +30,10 @@ export default function App() {
         }
       >
         <Route index element={<PlanFlow />} />
-        <Route path="cookbook" element={<Stub title="Cookbook" glyph="📖" />} />
-        <Route path="cart" element={<Stub title="Cart" glyph="🛒" />} />
-        <Route path="settings" element={<Stub title="Settings" glyph="⚙" />} />
+        <Route path="cookbook" element={<Cookbook />} />
+        <Route path="cookbook/:id" element={<RecipeDetail />} />
+        <Route path="cart" element={<CartRecord />} />
+        <Route path="settings" element={<Settings />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

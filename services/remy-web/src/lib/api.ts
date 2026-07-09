@@ -74,3 +74,20 @@ export const api = {
   put: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body }),
   del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
 }
+
+// Recipe images are served from an authenticated endpoint, so an <img> tag
+// can't load them directly (no Bearer header). Fetch the bytes with the token
+// and hand back an object URL; callers revoke it on unmount. Throws on failure
+// so the <AuthedImage> component can fall back to the warm placeholder.
+export async function fetchBlobUrl(path: string): Promise<string> {
+  const token = getToken()
+  const res = await fetch(`/api${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (res.status === 401) {
+    clearToken()
+  }
+  if (!res.ok) throw new ApiError(res.status, 'image_failed', 'Image failed to load.')
+  const blob = await res.blob()
+  return URL.createObjectURL(blob)
+}

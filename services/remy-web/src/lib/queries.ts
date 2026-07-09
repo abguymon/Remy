@@ -5,13 +5,21 @@
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
 import type {
+  ApiTokenCreated,
+  ApiTokenInfo,
   CartEdit,
+  KrogerAuthResponse,
   KrogerStatus,
   ListEdit,
   MealChoice,
+  OrderRecord,
   PlanSnapshot,
+  RecipeDetail,
+  RecipeSummary,
   RetryRequest,
   SettingsResponse,
+  SettingsUpdate,
+  StoreLocation,
   TokenResponse,
 } from './types'
 
@@ -105,5 +113,140 @@ export function useLogin() {
   return useMutation({
     mutationFn: (creds: { username: string; password: string }) =>
       api.post<TokenResponse>('/auth/login', creds),
+  })
+}
+
+// --- recipes (cookbook + detail) -------------------------------------------
+
+export function useRecipes(q: string) {
+  const query = q.trim()
+  return useQuery({
+    queryKey: ['recipes', query],
+    queryFn: () =>
+      api.get<RecipeSummary[]>(`/recipes${query ? `?q=${encodeURIComponent(query)}` : ''}`),
+  })
+}
+
+export function useRecipe(id: string | undefined) {
+  return useQuery({
+    queryKey: ['recipe', id],
+    queryFn: () => api.get<RecipeDetail>(`/recipes/${id}`),
+    enabled: !!id,
+  })
+}
+
+export function useCreateRecipeFromUrl() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (url: string) => api.post<RecipeDetail>('/recipes/from-url', { url }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['recipes'] }),
+  })
+}
+
+export function useUpdateRecipe(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: import('./types').RecipeUpdate) =>
+      api.put<RecipeDetail>(`/recipes/${id}`, body),
+    onSuccess: (recipe) => {
+      qc.setQueryData(['recipe', id], recipe)
+      qc.invalidateQueries({ queryKey: ['recipes'] })
+    },
+  })
+}
+
+export function useDeleteRecipe() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.del<void>(`/recipes/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['recipes'] }),
+  })
+}
+
+export function useMarkCooked(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.post<RecipeDetail>(`/recipes/${id}/cooked`),
+    onSuccess: (recipe) => {
+      qc.setQueryData(['recipe', id], recipe)
+      qc.invalidateQueries({ queryKey: ['recipes'] })
+    },
+  })
+}
+
+// --- orders (cart-as-record) -----------------------------------------------
+
+export function useOrders() {
+  return useQuery({
+    queryKey: ['orders'],
+    queryFn: () => api.get<OrderRecord[]>('/orders'),
+  })
+}
+
+// --- settings mutations ----------------------------------------------------
+
+export function useUpdateSettings() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: SettingsUpdate) => api.put<SettingsResponse>('/users/me/settings', body),
+    onSuccess: (settings) => qc.setQueryData(['settings'], settings),
+  })
+}
+
+// --- kroger connect / store search -----------------------------------------
+
+export function useKrogerAuth() {
+  return useMutation({ mutationFn: () => api.get<KrogerAuthResponse>('/kroger/auth') })
+}
+
+export function useDisconnectKroger() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.del<void>('/kroger/disconnect'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['kroger', 'status'] }),
+  })
+}
+
+export function useStoreSearch() {
+  return useMutation({
+    mutationFn: (zip: string) =>
+      api.get<StoreLocation[]>(`/kroger/stores?zip=${encodeURIComponent(zip)}`),
+  })
+}
+
+export function useSelectStore() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (locationId: string) =>
+      api.post<{ store_location_id: string; store_name: string | null; zip_code: string | null }>(
+        `/kroger/stores/${locationId}/select`,
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+  })
+}
+
+// --- api tokens ------------------------------------------------------------
+
+export function useApiTokens() {
+  return useQuery({
+    queryKey: ['api-tokens'],
+    queryFn: () => api.get<ApiTokenInfo[]>('/users/me/api-tokens'),
+  })
+}
+
+export function useCreateApiToken() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (name: string) =>
+      api.post<ApiTokenCreated>('/users/me/api-tokens', { name }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['api-tokens'] }),
+  })
+}
+
+export function useRevokeApiToken() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.del<void>(`/users/me/api-tokens/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['api-tokens'] }),
   })
 }

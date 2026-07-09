@@ -225,3 +225,101 @@ export interface SettingsResponse {
   zip_code: string | null
   fulfillment_method: FulfillmentMethod
 }
+
+export interface SettingsUpdate {
+  pantry_items?: string[]
+  favorite_sites?: string[]
+  store_location_id?: string | null
+  store_name?: string | null
+  zip_code?: string | null
+  fulfillment_method?: FulfillmentMethod
+}
+
+// --- recipes (T8: cookbook + detail) ---
+export interface RecipeSummary {
+  id: string
+  title: string
+  slug: string
+  source_url: string | null
+  image_url: string | null
+  total_time: string | null
+  created_at: string
+  last_cooked_at: string | null
+}
+
+export interface Ingredient {
+  id: string
+  position: number
+  raw: string
+  quantity: number | null
+  unit: string | null
+  food: string | null
+  note: string | null
+}
+
+export interface RecipeDetail extends RecipeSummary {
+  recipe_yield: string | null
+  prep_time: string | null
+  cook_time: string | null
+  instructions: string[]
+  ingredients: Ingredient[]
+}
+
+export interface RecipeUpdate {
+  title?: string
+  source_url?: string | null
+  recipe_yield?: string | null
+  prep_time?: string | null
+  cook_time?: string | null
+  total_time?: string | null
+  instructions?: string[]
+  ingredients?: { raw: string }[]
+}
+
+// --- orders (T8: cart-as-record) ---
+export interface OrderItem {
+  upc: string
+  description: string | null
+  quantity: number
+  price: number | null
+  status: string
+  reason: string | null
+}
+
+export interface OrderRecord {
+  id: string
+  plan_id: string | null
+  items: OrderItem[]
+  estimated_total: number | null
+  created_at: string
+}
+
+// --- kroger store search ---
+export interface StoreLocation {
+  id: string
+  name: string | null
+  chain: string | null
+  address: string | null
+  city: string | null
+  state: string | null
+  zip_code: string | null
+  full_address: string | null
+  distance: number | null
+}
+
+// --- api tokens (T8: settings) ---
+export interface ApiTokenInfo {
+  id: string
+  name: string
+  created_at: string
+  last_used_at: string | null
+  revoked_at: string | null
+}
+
+export interface ApiTokenCreated extends ApiTokenInfo {
+  token: string
+}
+
+export interface KrogerAuthResponse {
+  auth_url: string
+}

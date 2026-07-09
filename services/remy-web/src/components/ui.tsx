@@ -2,6 +2,7 @@
 // prototype in design/src. Phone-first, ≥44px touch targets, AA contrast.
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { fetchBlobUrl } from '../lib/api'
 import { useToast } from '../stores/toast'
 
 // --- Button ----------------------------------------------------------------
@@ -168,6 +169,58 @@ export function PhotoFallback({
       </span>
     </div>
   )
+}
+
+// --- Authed image (recipe photos) ------------------------------------------
+// Loads a Bearer-protected image endpoint via blob fetch, shows a shimmer while
+// loading, and falls back to the warm crosshatch placeholder on error/absence.
+
+export function AuthedImage({
+  path,
+  alt,
+  className = '',
+  label = 'recipe photo',
+}: {
+  path?: string | null
+  alt?: string
+  className?: string
+  label?: string
+}) {
+  const [url, setUrl] = useState<string | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    if (!path) {
+      setFailed(true)
+      return
+    }
+    setFailed(false)
+    setUrl(null)
+    let active = true
+    let objUrl: string | null = null
+    fetchBlobUrl(path)
+      .then((u) => {
+        if (active) {
+          objUrl = u
+          setUrl(u)
+        } else {
+          URL.revokeObjectURL(u)
+        }
+      })
+      .catch(() => active && setFailed(true))
+    return () => {
+      active = false
+      if (objUrl) URL.revokeObjectURL(objUrl)
+    }
+  }, [path])
+
+  if (failed || !path) {
+    return <PhotoFallback className={className} label={label} />
+  }
+  if (!url) {
+    return <div className={`sk h-full w-full ${className}`} />
+  }
+  return <img src={url} alt={alt ?? ''} className={`h-full w-full object-cover ${className}`} />
 }
 
 // --- Sticky action bar -----------------------------------------------------
