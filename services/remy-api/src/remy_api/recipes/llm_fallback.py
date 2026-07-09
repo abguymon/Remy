@@ -11,10 +11,10 @@ that signature. The fallback is cleanly *skippable*: when no client is wired
 (``llm=None``), the scraper raises :class:`RecipeParseError` listing exactly what
 was missing instead of guessing.
 
-TODO(T5/orchestrator): wire T4's LLM client here — pass it into
-``scrape_recipe(..., llm=<client>)`` from the planner's Select step, and register
-the ``recipe_parse_fallback`` prompt (schema :class:`LLMRecipeExtraction`) in
-T4's prompt library.
+The real client is wired at both parse sites — ``planner.select_step`` and
+``routers.recipes.create_recipe_from_url`` pass ``llm=get_prompt_id_llm()`` into
+``scrape_recipe`` — and the ``recipe_parse_fallback`` prompt (schema
+:class:`LLMRecipeExtraction`) is registered in the prompt library.
 """
 
 from __future__ import annotations

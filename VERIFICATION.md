@@ -13,7 +13,7 @@ Stack under test: `remy-api` :8080 (real OpenAI `gpt-4o`, `SEARCH_PROVIDER=llm`,
 | 2 | 3 meals → ≤~30s, per-meal progress, ~5 candidates w/ images, saved-first, favorite badges, zero listicles | PASS* | ~14s. Saved-first confirmed. Listicle-free. **Required a fix** (LLM search provider was 100% broken with gpt-4o). Thumbnails partial (cosmetic). |
 | 3 | Consolidated list, dup foods merged, pantry separated + re-includable, editable | PASS | garlic merged across 3 recipes (9 cloves); qty edit + free-text add + pantry re-include all work. |
 | 4 | Per-line real products (photo/size/price/stock), ≥1 swap to alternative | PASS | Real Kroger products; 28/35 lines have alternatives; swap recomputes total exactly; `manual_search` recovers a not_found line. |
-| 5 | Real cart write + truthful report | **NOT EXECUTED — reserved for human.** Plan left READY in `reviewing_cart`. **Kroger must be reconnected first (see incident).** |
+| 5 | Real cart write + truthful report | PASS | Executed by the human 2026-07-09 after reconnecting Kroger: ~31-item draft (est. ~$103.51, Fred Meyer, PICKUP) added to the real Kroger cart; items confirmed on kroger.com. |
 | 6 | Selected recipes in cookbook w/ images + ingredients/instructions, searchable | PASS | 3 recipes saved (2/3 w/ image); FTS matches title *and* ingredients. |
 | 7 | Resume mid-flow | PASS | Fresh login + fresh browser load both resume `reviewing_cart` with full cart. Survived 4 API restarts (server-persisted). |
 | 8 | LLM/search failure → scoped visible errors + retry | PASS | LLM fail → API 502 `llm_error` + UI toast; search fail → scoped `web_search_failed` w/ typed cause; retry after restore works. |

@@ -40,6 +40,7 @@ from remy_api.models import FulfillmentMethod, KrogerToken, OAuthState, UserSett
 
 router = APIRouter(prefix="/kroger", tags=["kroger"])
 
+
 def _settings_redirect(**params: str) -> RedirectResponse:
     # Where the browser lands after the OAuth round-trip. Relative by default so
     # it resolves to the deployed origin (Traefik serves web + /api on one host,

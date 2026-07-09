@@ -2,20 +2,16 @@
 
 Guidance for Claude Code (claude.ai/code) when working in this repository.
 
-## Authoritative docs — read these first
+## Authoritative docs
 
-Remy is being rebuilt (v2). The specification lives in three root docs; they
-**override any code**, including anything under `legacy/`:
+The specification and build history live in three root docs; the PRD
+**overrides code** where they disagree:
 
 - **`PRD.md`** — product requirements & system spec (the source of truth).
 - **`DESIGN_BRIEF.md`** — visual/interaction spec for the frontend.
-- **`V2_PLAN.md`** — the task breakdown (T0…T10). Do one task per session,
-  follow its "Instructions for an implementing session", and update its
-  checkbox + status note when done. Appendix A reviews the legacy prompts.
-
-`legacy/` holds the proof-of-concept (old `services/`, `docker-compose.yml`,
-and design notes). It is **reference material only** — never import from it and
-never treat its behavior as a requirement where the PRD says otherwise.
+- **`V2_PLAN.md`** — the task breakdown (T0…T10) and its status notes; a record
+  of how the current codebase was built. Appendix A documents the ported prompt
+  heuristics.
 
 ## Project overview
 

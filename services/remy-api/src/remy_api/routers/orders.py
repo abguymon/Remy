@@ -40,10 +40,6 @@ async def list_orders(
     offset: int = Query(default=0, ge=0),
 ) -> list[OrderRecord]:
     rows = await session.execute(
-        select(Order)
-        .where(Order.user_id == user.id)
-        .order_by(Order.created_at.desc())
-        .limit(limit)
-        .offset(offset)
+        select(Order).where(Order.user_id == user.id).order_by(Order.created_at.desc()).limit(limit).offset(offset)
     )
     return [OrderRecord.model_validate(o) for o in rows.scalars().all()]
