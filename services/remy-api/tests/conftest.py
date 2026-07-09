@@ -15,14 +15,17 @@ os.environ.setdefault("JWT_SECRET", "test-jwt-secret-not-for-production-use-only
 os.environ.setdefault("ENCRYPTION_KEY", Fernet.generate_key().decode())
 
 # Isolated on-disk SQLite DB for the whole test session (a real file so encrypted
-# columns can be inspected as raw bytes).
+# columns can be inspected as raw bytes). These are FORCE-assigned, never
+# ``setdefault``: the test session drops/recreates all tables, so inheriting an
+# ambient ``DATABASE_URL`` (e.g. a sourced deployment env pointing at the live
+# dev DB) would silently wipe real data. Tests must always use a throwaway file.
 _DB_FD, _DB_PATH = tempfile.mkstemp(suffix=".db", prefix="remy-test-")
 os.close(_DB_FD)
-os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{_DB_PATH}")
+os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{_DB_PATH}"
 
 # Recipe images go to a throwaway temp dir so tests never touch the repo data dir.
 _IMAGES_DIR = tempfile.mkdtemp(prefix="remy-test-images-")
-os.environ.setdefault("RECIPE_IMAGES_DIR", _IMAGES_DIR)
+os.environ["RECIPE_IMAGES_DIR"] = _IMAGES_DIR
 
 import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402

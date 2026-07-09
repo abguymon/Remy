@@ -99,9 +99,9 @@ Status notes: Done. Built on T7's foundations (`api.ts`, `queries.ts`, `types.ts
 
 ## Phase 5 — Hardening & cutover
 
-### ☐ T9: Verification pass
+### ☑ T9: Verification pass
 Walk PRD §10 acceptance criteria 1–11 end-to-end against a real deployment (real Kroger account, real store, real web search), fixing what fails. Add the failure-mode drills: kill the LLM provider mid-plan and the search provider mid-discovery — verify scoped, visible errors with retry (criterion 8); kill the browser mid-flow and resume (criterion 7). Record results in a `VERIFICATION.md` checklist.
-Status notes: —
+Status notes: **PASS except C5 pending human execute.** C1–C4, C6–C8, C10–C11 all PASS; C5 left READY in `reviewing_cart` for the human (must reconnect Kroger first — see incident); C9 PARTIAL (CLI verified + unit-tested, but no live Mealie instance in-env — real import is the T10 cutover step). See `VERIFICATION.md`. Fixes: (1) `search/llm_provider.py` OpenAI web-search model mapping (was a hard C2 blocker — `gpt-4o` rejects `web_search_options`); (2) `tests/conftest.py` force-isolate `DATABASE_URL`/`RECIPE_IMAGES_DIR` (a sourced deploy env had let `pytest` wipe the live dev DB — recovered: recreated `test` user + store; Kroger OAuth tokens unrecoverable, human must reconnect); (3) `__main__.py` clean `import-mealie` connection-error message. 146 backend tests pass, `tsc` build green, ruff clean.
 
 ### ☐ T10: Cutover
 Delete `legacy/`, finalize `README.md` (setup, env, deploy, Mealie import instructions), final `CLAUDE.md`, merge v2 → master, deploy, run the Mealie import against the production Mealie instance, then decommission the Mealie + old MCP containers.

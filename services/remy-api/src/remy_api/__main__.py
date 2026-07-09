@@ -19,6 +19,7 @@ import asyncio
 import getpass
 import sys
 
+import httpx
 from sqlalchemy import select
 
 from remy_api.db import dispose_engine, get_session_factory, init_db
@@ -103,6 +104,13 @@ def main(argv: list[str] | None = None) -> int:
             asyncio.run(_import_mealie(args.username, args.url, args.api_key, args.dry_run))
         except APIError as exc:
             print(f"Error: {exc.message}", file=sys.stderr)
+            return 1
+        except (httpx.HTTPError, OSError) as exc:
+            print(
+                f"Error: could not reach Mealie at {args.url}: {exc}. "
+                "Check the URL is reachable from this host and the API key is valid.",
+                file=sys.stderr,
+            )
             return 1
         return 0
 

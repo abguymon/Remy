@@ -56,6 +56,31 @@ class LLMSearchProvider:
             f"got '{model}'. Set SEARCH_PROVIDER=brave instead."
         )
 
+    @staticmethod
+    def _openai_search_model(model: str) -> str:
+        """Map an OpenAI chat model to its web-search-capable variant.
+
+        OpenAI exposes ``web_search_options`` only on the ``*-search-preview``
+        chat models (a plain ``gpt-4o`` raises "Web search options not supported
+        with this model"). The general ``LLM_MODEL`` used for extraction/ranking
+        is typically not a search model, so map it here rather than requiring a
+        separate search-model env var. Models that are already a search variant
+        pass through unchanged.
+        """
+        prefix = ""
+        bare = model
+        if "/" in model:
+            prefix, bare = model.split("/", 1)
+            prefix += "/"
+        if "search" in bare.lower():
+            return model
+        if bare.startswith("gpt-4o-mini"):
+            bare = "gpt-4o-mini-search-preview"
+        else:
+            # gpt-4o and anything else we don't recognize: use the 4o search model.
+            bare = "gpt-4o-search-preview"
+        return f"{prefix}{bare}"
+
     def _build_kwargs(self, prompt: str) -> dict:
         kwargs: dict = {
             "model": self._model,
@@ -69,6 +94,10 @@ class LLMSearchProvider:
         if self._provider == "anthropic":
             kwargs["tools"] = [{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}]
         else:  # openai
+            # Search-preview models both require web_search_options and reject the
+            # temperature parameter, so swap the model and drop temperature.
+            kwargs["model"] = self._openai_search_model(self._model)
+            kwargs.pop("temperature", None)
             kwargs["web_search_options"] = {}
         return kwargs
 
