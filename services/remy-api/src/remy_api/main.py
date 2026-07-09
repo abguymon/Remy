@@ -17,7 +17,7 @@ from remy_api import __version__
 from remy_api.config import get_settings
 from remy_api.db import dispose_engine, init_db
 from remy_api.errors import register_error_handlers
-from remy_api.routers import auth, users
+from remy_api.routers import auth, recipes, users
 
 # Fail closed: importing the app validates required secrets. A misconfigured
 # container exits here with a clear ConfigError rather than starting.
@@ -46,6 +46,7 @@ app.add_middleware(
 register_error_handlers(app)
 app.include_router(auth.router)
 app.include_router(users.router)
+app.include_router(recipes.router)
 
 
 @app.get("/health")

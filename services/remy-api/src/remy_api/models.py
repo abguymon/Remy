@@ -149,6 +149,9 @@ class Recipe(Base):
     slug: Mapped[str] = mapped_column(String(512), nullable=False)
     source_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     image_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    # Mealie slug for the one-shot import CLI (T3): dedicated dedupe key so a
+    # re-run skips recipes already imported. Null for web-scraped/manual recipes.
+    mealie_slug: Mapped[str | None] = mapped_column(String(512), nullable=True, index=True)
     recipe_yield: Mapped[str | None] = mapped_column(String(255), nullable=True)
     prep_time: Mapped[str | None] = mapped_column(String(64), nullable=True)
     cook_time: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -160,7 +163,10 @@ class Recipe(Base):
 
     user: Mapped[User] = relationship(back_populates="recipes")
     ingredients: Mapped[list[RecipeIngredient]] = relationship(
-        back_populates="recipe", cascade="all, delete-orphan", order_by="RecipeIngredient.position"
+        back_populates="recipe",
+        cascade="all, delete-orphan",
+        order_by="RecipeIngredient.position",
+        lazy="selectin",  # always eager-load: recipe reads need lines in async context
     )
 
     __table_args__ = (UniqueConstraint("user_id", "slug", name="uq_recipe_user_slug"),)
