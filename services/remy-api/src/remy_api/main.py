@@ -7,6 +7,7 @@ database schema on startup, and mounts the auth/user routers.
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -28,16 +29,28 @@ settings = get_settings()
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+async def lifespan(app_: FastAPI) -> AsyncIterator[None]:
     # No Alembic in v1; create tables on startup (models are kept clean enough
     # to add migrations later).
     await init_db()
-    yield
+    # The MCP facade (if mounted) needs its streamable-http session manager
+    # running for the lifetime of the app.
+    async with contextlib.AsyncExitStack() as stack:
+        mcp_ctx = getattr(app_.state, "mcp_lifespan", None)
+        if mcp_ctx is not None:
+            await stack.enter_async_context(mcp_ctx)
+        yield
     await close_client()
     await dispose_engine()
 
 
 app = FastAPI(title=settings.api_title, version=settings.api_version, lifespan=lifespan)
+
+# Mount the MCP facade (PRD §7.4) before startup so its session-manager lifespan
+# is available to the app lifespan. Feature-flagged (default on).
+from remy_api.mcp_facade import attach_mcp_if_enabled  # noqa: E402
+
+app.state.mcp_lifespan = attach_mcp_if_enabled(app, settings)
 
 app.add_middleware(
     CORSMiddleware,

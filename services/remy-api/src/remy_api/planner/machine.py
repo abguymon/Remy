@@ -197,7 +197,9 @@ async def approve_list(session: AsyncSession, user: User) -> Plan:
             )
         plan.status = PlanStatus.MATCHING
         # Seed an empty matching cart so polling shows the transition immediately.
-        plan.matches = CartState(status=MatchStage.MATCHING).model_dump(mode="json")
+        # Mint the cart_draft_id here (MCP draft-id chain, PRD §7.4); run_match
+        # preserves it, and a fresh match/approve re-mints a new one.
+        plan.matches = CartState(status=MatchStage.MATCHING, cart_draft_id=uuid.uuid4().hex).model_dump(mode="json")
         await session.commit()
         plan_id = plan.id
     _launch(user.id, matching.run_match(plan_id))
@@ -216,10 +218,27 @@ async def cart_edits(session: AsyncSession, user: User, ops: list) -> Plan:
         return plan
 
 
-async def execute_cart(session: AsyncSession, user: User) -> Plan:
+async def execute_cart(session: AsyncSession, user: User, *, cart_draft_id: str | None = None) -> Plan:
+    """Write the confirmed cart to the real Kroger cart.
+
+    ``cart_draft_id`` is the MCP draft-id safety check (PRD §7.4): the web UI
+    calls with ``None`` (it is already bound to the caller's active plan via the
+    JWT), while the MCP ``execute_cart`` tool passes the id it was handed by
+    ``match_products``. When provided it must match the id currently on the plan
+    row — an unknown, foreign, or stale (post-re-match) id is rejected before any
+    cart write, so an agent can never fabricate a cart execution.
+    """
     async with _lock(user.id):
         plan = await _require_active(session, user.id)
         _require_status(plan, PlanStatus.REVIEWING_CART)
+        if cart_draft_id is not None:
+            current = (plan.matches or {}).get("cart_draft_id")
+            if not current or current != cart_draft_id:
+                raise ConflictError(
+                    "Unknown or stale cart_draft_id. Run match_products to get the current "
+                    "cart draft for this plan before executing.",
+                    code="invalid_cart_draft",
+                )
         await execute.execute_plan(session, plan)
         await session.refresh(plan)
         return plan

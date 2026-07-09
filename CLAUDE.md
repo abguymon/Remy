@@ -41,6 +41,15 @@ is a plain DB-persisted state machine). The MCP facade (FastMCP mounted into
 FastAPI, flag `MCP_FACADE_ENABLED`, default on) is a first-class second UI that
 calls the same modules — never divergent logic.
 
+- **MCP facade** (`remy_api.mcp_facade`, T6): streamable-HTTP endpoint at
+  **`/mcp`** (via the reverse proxy: `https://<host>/api/mcp`). Auth = a
+  per-user Remy **API token** (`remy_…`, generated in Settings) sent as
+  `Authorization: Bearer …`; JWTs are rejected. Tools mirror the pipeline gates
+  (`find_recipes` → `select_recipes` → `build_shopping_list`/`edit_shopping_list`
+  → `match_products`/`swap_product` → `execute_cart`, plus cookbook/settings and
+  `plan_status`). The plan/cart **draft-id chain** is the write-safety structure:
+  `execute_cart` accepts only the current `cart_draft_id`.
+
 - **Access:** frontend http://localhost:3000, API http://localhost:8080.
 - **API proxy:** remy-web proxies `/api/*` → remy-api (vite dev proxy locally,
   nginx `location /api/` in prod; the `/api` prefix is stripped).

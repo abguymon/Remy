@@ -187,6 +187,8 @@ async def run_match(plan_id: str) -> None:
         if plan is None or plan.status != PlanStatus.MATCHING:
             return
         user_id = plan.user_id
+        # Preserve the cart_draft_id minted at approve time (MCP draft-id chain).
+        cart_draft_id = CartState(**(plan.matches or {})).cart_draft_id or uuid.uuid4().hex
         settings_row = await session.execute(select(UserSettings).where(UserSettings.user_id == user_id))
         settings = settings_row.scalar_one_or_none()
         location_id = settings.store_location_id if settings else None
@@ -202,7 +204,10 @@ async def run_match(plan_id: str) -> None:
 
         if not location_id:
             plan.matches = CartState(
-                status=MatchStage.ERROR, warnings=warnings, error="No preferred store selected."
+                cart_draft_id=cart_draft_id,
+                status=MatchStage.ERROR,
+                warnings=warnings,
+                error="No preferred store selected.",
             ).model_dump(mode="json")
             plan.status = PlanStatus.REVIEWING_CART
             await session.commit()
@@ -242,7 +247,9 @@ async def run_match(plan_id: str) -> None:
         plan = await session.get(Plan, plan_id)
         if plan is None or plan.status != PlanStatus.MATCHING:
             return
-        plan.matches = CartState(status=MatchStage.MATCHING, items=items, warnings=warnings).model_dump(mode="json")
+        plan.matches = CartState(
+            cart_draft_id=cart_draft_id, status=MatchStage.MATCHING, items=items, warnings=warnings
+        ).model_dump(mode="json")
         await session.commit()
 
     write_lock = asyncio.Lock()

@@ -52,13 +52,13 @@ async def _user_from_jwt(session: AsyncSession, token: str) -> User:
     return user
 
 
-async def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
-    session: Annotated[AsyncSession, Depends(get_session)],
-) -> User:
-    if credentials is None or not credentials.credentials:
-        raise AuthenticationError("Missing bearer token.")
-    token = credentials.credentials
+async def resolve_bearer_user(session: AsyncSession, token: str) -> User:
+    """Resolve a bearer token (API token or JWT) to an active :class:`User`.
+
+    The single source of truth for bearer auth, shared by the HTTP dependency
+    below and the MCP facade middleware so the two interfaces resolve identical
+    ``user_id`` scoping (no duplicated hash lookup, FR-26 / PRD §7.4).
+    """
     if looks_like_api_token(token):
         user = await _user_from_api_token(session, token)
     else:
@@ -66,6 +66,29 @@ async def get_current_user(
     if not user.is_active:
         raise PermissionError_("User account is disabled.")
     return user
+
+
+async def resolve_api_token_user(session: AsyncSession, token: str) -> User:
+    """Resolve an *API token only* (``remy_`` prefix) to an active user.
+
+    The MCP facade rejects JWTs and anything else: agents authenticate solely
+    with Settings-generated API tokens (PRD §7.4).
+    """
+    if not looks_like_api_token(token):
+        raise AuthenticationError("MCP requires a Remy API token (starts with 'remy_'). Generate one in Settings.")
+    user = await _user_from_api_token(session, token)
+    if not user.is_active:
+        raise PermissionError_("User account is disabled.")
+    return user
+
+
+async def get_current_user(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> User:
+    if credentials is None or not credentials.credentials:
+        raise AuthenticationError("Missing bearer token.")
+    return await resolve_bearer_user(session, credentials.credentials)
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]

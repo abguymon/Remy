@@ -198,6 +198,10 @@ class MatchItem(BaseModel):
 
 
 class CartState(BaseModel):
+    # Opaque draft id for the MCP draft-id chain (PRD §7.4): minted when matching
+    # starts, preserved across cart edits, and re-minted on a fresh match. The
+    # ``execute_cart`` gate accepts only the id currently on the plan row.
+    cart_draft_id: str | None = None
     status: MatchStage = MatchStage.PENDING
     estimated_total: float = 0.0
     items: list[MatchItem] = Field(default_factory=list)

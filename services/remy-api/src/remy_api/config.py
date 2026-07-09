@@ -83,6 +83,12 @@ class Settings(BaseSettings):
 
     # --- MCP facade ---
     mcp_facade_enabled: bool = True
+    # DNS-rebinding protection for the MCP endpoint. Off by default: the facade
+    # sits behind the reverse proxy and enforces its own bearer-token auth, and
+    # the public Host header is not known at build time. Set these (comma- or
+    # JSON-list) to your deploy domain to turn strict host/origin checks back on.
+    mcp_allowed_hosts: list[str] = []
+    mcp_allowed_origins: list[str] = []
 
     # --- CORS (dev) ---
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
