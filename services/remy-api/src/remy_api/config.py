@@ -65,12 +65,17 @@ class Settings(BaseSettings):
     kroger_redirect_uri: str = "http://localhost:8080/kroger/callback"
 
     # --- LLM (provider-agnostic) ---
+    # LiteLLM routes off the model string ("anthropic/...", "openai/...").
     llm_provider: str = "anthropic"
-    llm_model: str = "claude-sonnet-4-5"
+    llm_model: str = "anthropic/claude-sonnet-4-5"
+    llm_temperature: float = 0.0
+    llm_timeout: float = 60.0
+    llm_max_retries: int = 0  # transport retries; validation retry is separate
 
     # --- Web search ---
-    search_provider: str = "brave"
+    search_provider: str = "brave"  # brave | llm
     search_api_key: str = ""
+    search_timeout: float = 10.0
 
     # --- MCP facade ---
     mcp_facade_enabled: bool = True

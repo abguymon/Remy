@@ -1,0 +1,56 @@
+{
+  "description": "Sample Kroger product result sets (shape mirrors the normalized search_products output: description, size, price, department). `expect` drives P5 ranking assertions.",
+  "cases": [
+    {
+      "search_term": "canned black beans",
+      "package_quantity": 1,
+      "products": [
+        {"description": "Kroger Black Beans", "size": "15 oz", "price": 1.19, "department": "Canned & Packaged"},
+        {"description": "Bush's Black Beans 8-Pack Value", "size": "8 x 15 oz", "price": 9.49, "department": "Canned & Packaged"},
+        {"description": "Black Bean & Corn Salsa", "size": "16 oz", "price": 3.99, "department": "Deli"},
+        {"description": "Dried Black Beans", "size": "16 oz", "price": 1.89, "department": "Canned & Packaged"}
+      ],
+      "expect": {"prefer_description_contains": "Kroger Black Beans", "avoid_description_contains": "8-Pack", "none_acceptable": false}
+    },
+    {
+      "search_term": "fresh green onions",
+      "package_quantity": 1,
+      "products": [
+        {"description": "Green Onions (Scallions), bunch", "size": "1 bunch", "price": 0.99, "department": "Produce"},
+        {"description": "Fried Onion Straws", "size": "6 oz", "price": 2.49, "department": "Snacks"},
+        {"description": "Green Onion Cream Cheese Dip", "size": "8 oz", "price": 3.29, "department": "Deli"}
+      ],
+      "expect": {"prefer_description_contains": "Green Onions", "avoid_description_contains": "Dip", "none_acceptable": false}
+    },
+    {
+      "search_term": "fresh mint",
+      "package_quantity": 1,
+      "products": [
+        {"description": "Fresh Mint", "size": "0.5 oz", "price": 2.29, "department": "Produce"},
+        {"description": "Wrigley's Doublemint Gum", "size": "15 sticks", "price": 1.49, "department": "Candy"},
+        {"description": "Mint Chocolate Chip Ice Cream", "size": "48 oz", "price": 4.99, "department": "Frozen"}
+      ],
+      "expect": {"prefer_description_contains": "Fresh Mint", "avoid_description_contains": "Gum", "none_acceptable": false}
+    },
+    {
+      "search_term": "chicken thighs",
+      "target_size": "2 lb",
+      "package_quantity": 1,
+      "products": [
+        {"description": "Boneless Skinless Chicken Thighs", "size": "1 lb", "price": 3.99, "department": "Meat"},
+        {"description": "Boneless Skinless Chicken Thighs Family Pack", "size": "2.5 lb", "price": 8.99, "department": "Meat"},
+        {"description": "Chicken Thigh Seasoning Blend", "size": "2 oz", "price": 1.99, "department": "Spices"}
+      ],
+      "expect": {"prefer_description_contains": "Family Pack", "avoid_description_contains": "Seasoning", "none_acceptable": false}
+    },
+    {
+      "search_term": "fresh saffron threads",
+      "package_quantity": 1,
+      "products": [
+        {"description": "Saffron Rice Mix", "size": "5 oz", "price": 2.49, "department": "Rice & Grains"},
+        {"description": "Yellow Food Coloring", "size": "1 oz", "price": 3.99, "department": "Baking"}
+      ],
+      "expect": {"none_acceptable": true}
+    }
+  ]
+}

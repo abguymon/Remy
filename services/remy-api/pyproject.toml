@@ -16,6 +16,8 @@ dependencies = [
     "pyjwt>=2.9.0,<3.0.0",
     "argon2-cffi>=23.1.0,<24.0.0",
     "pyyaml>=6.0.0,<7.0.0",
+    "litellm>=1.55.0,<2.0.0",
+    "selectolax>=0.3.21,<1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -63,4 +65,7 @@ indent-style = "space"
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short -m 'not prompts'"
+markers = [
+    "prompts: LLM prompt evals; run only when an LLM API key is present (select with -m prompts)",
+]

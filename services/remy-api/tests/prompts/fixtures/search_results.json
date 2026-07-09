@@ -1,0 +1,32 @@
+{
+  "description": "Sample web search results per query. is_listicle marks titles a regex/LLM should drop; keep=true are single recipe pages that must survive.",
+  "cases": [
+    {
+      "query": "chicken tikka masala",
+      "candidates": [
+        {"title": "Easy Chicken Tikka Masala", "url": "https://www.seriouseats.com/chicken-tikka-masala-recipe", "snippet": "A weeknight version of the classic.", "is_listicle": false, "keep": true},
+        {"title": "Chicken Tikka Masala Recipe", "url": "https://cookieandkate.com/chicken-tikka-masala/", "snippet": "Creamy tomato curry.", "is_listicle": false, "keep": true},
+        {"title": "15 Best Chicken Tikka Masala Recipes", "url": "https://example.com/best-chicken-tikka-masala-recipes/", "snippet": "Our roundup of the best.", "is_listicle": true, "keep": false},
+        {"title": "20 Easy Indian Dinners for Weeknights", "url": "https://example.com/easy-indian-dinners/", "snippet": "Collection of curries.", "is_listicle": true, "keep": false},
+        {"title": "The History of Tikka Masala", "url": "https://example.com/blog/history-of-tikka-masala", "snippet": "An article about the dish's origins.", "is_listicle": false, "keep": false}
+      ]
+    },
+    {
+      "query": "street tacos",
+      "candidates": [
+        {"title": "Authentic Street Tacos", "url": "https://cookieandkate.com/street-tacos/", "snippet": "Carne asada tacos.", "is_listicle": false, "keep": true},
+        {"title": "23 Taco Recipes to Try This Cinco de Mayo", "url": "https://example.com/taco-recipes/", "snippet": "Roundup.", "is_listicle": true, "keep": false},
+        {"title": "Taco Recipes", "url": "https://www.seriouseats.com/recipes/topics/dish/tacos", "snippet": "Category page.", "is_listicle": false, "keep": false},
+        {"title": "10 Ways to Upgrade Taco Night", "url": "https://example.com/upgrade-taco-night/", "snippet": "Tips listicle.", "is_listicle": true, "keep": false}
+      ]
+    },
+    {
+      "query": "salmon dinner",
+      "candidates": [
+        {"title": "Baked Salmon with Lemon", "url": "https://www.seriouseats.com/baked-salmon", "snippet": "Simple baked salmon.", "is_listicle": false, "keep": true},
+        {"title": "5-Ingredient Honey Garlic Salmon", "url": "https://example.com/honey-garlic-salmon/", "snippet": "Leading number is an ingredient count, not a roundup.", "is_listicle": false, "keep": true},
+        {"title": "17 Salmon Recipes for Dinner", "url": "https://example.com/salmon-recipes/", "snippet": "Roundup.", "is_listicle": true, "keep": false}
+      ]
+    }
+  ]
+}

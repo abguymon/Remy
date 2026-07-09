@@ -38,10 +38,10 @@ Recipes module per PRD §5: CRUD + FTS search over title/ingredient foods; `reci
 **Done when:** three real recipe URLs (one schema.org-clean, one messy, one paywalled/broken) parse or fail gracefully with typed errors; Mealie import brings over an existing library with images.
 Status notes: —
 
-### ☐ T4: LLM client, search providers, prompt library
+### ☑ T4: LLM client, search providers, prompt library
 LLM: provider-agnostic client (LiteLLM) configured by env; a single `structured(prompt_id, input, schema)` entrypoint enforcing Pydantic validation with one retry (PRD §7.1). Search: `SearchProvider` interface + Brave implementation + LLM-native-web-search implementation, env-selected (PRD §7.3); og:image thumbnail fetcher (proper HTML parser, short timeout, bounded concurrency). **Prompt library**: implement all six prompts as versioned modules with typed input/output models, following Appendix A's port-and-improve guidance. Include a lightweight eval harness: fixture files of real inputs (ingredient lines from legacy test data, sample search results) with expected outputs, runnable as `pytest -m prompts`, so future prompt tuning is measurable rather than vibes.
 **Done when:** prompt evals pass against fixtures; swapping `LLM_PROVIDER` between two providers requires only env changes.
-Status notes: —
+Status notes: Done. `llm/` (LiteLLM `structured()` — JSON-schema output, Pydantic validation, one error-fed retry, typed LLMError hierarchy), `search/` (Brave + LLM-native providers behind `SearchProvider` protocol, selectolax og:image thumbnails), `prompts/` (P1–P5 + P4a, indexed I/O, shared PRODUCT_RULES block, regex listicle prefilter). Provider config unified into `config.Settings` at merge (providers/settings.py is a shim). 37 keyless unit tests + 10 live evals green against openai/gpt-4o via the unified config; evals skip cleanly without a matching key.
 
 ## Phase 3 — The planner
 

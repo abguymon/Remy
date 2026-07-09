@@ -1,0 +1,72 @@
+{
+  "description": "Real-world ingredient lines. `parse` = expected P4a fields; `products` = expected P4 extraction expectations (substring/contains checks, not exact strings).",
+  "cases": [
+    {
+      "raw": "1 cup black beans",
+      "parse": {"quantity": 1, "unit": "cup", "food": "black bean"},
+      "products": [{"search_term_contains": "black bean", "must_contain": "canned", "package_quantity": 1}]
+    },
+    {
+      "raw": "1 (15 oz) can kidney beans, drained and rinsed",
+      "parse": {"quantity": 1, "unit": "can", "food": "kidney bean", "note_contains": "drained"},
+      "products": [{"search_term_contains": "kidney bean", "must_contain": "canned", "package_quantity": 1}]
+    },
+    {
+      "raw": "500g dried chickpeas",
+      "parse": {"food": "chickpea", "note_contains": "dried"},
+      "products": [{"search_term_contains": "garbanzo", "must_contain": "dried", "package_quantity": 1}]
+    },
+    {
+      "raw": "6 scallions, thinly sliced",
+      "parse": {"quantity": 6, "food": "scallion"},
+      "products": [{"search_term_contains": "green onion", "must_contain": "fresh", "package_quantity": 1}]
+    },
+    {
+      "raw": "3 cloves garlic, minced",
+      "parse": {"quantity": 3, "unit": "clove", "food": "garlic", "note_contains": "minced"},
+      "products": [{"search_term_contains": "garlic", "package_quantity": 1}]
+    },
+    {
+      "raw": "2 limes",
+      "parse": {"quantity": 2, "food": "lime"},
+      "products": [{"search_term_contains": "lime", "package_quantity": 2}]
+    },
+    {
+      "raw": "Salt and pepper to taste",
+      "parse": {"food_contains": "salt", "note_contains": "taste"},
+      "products": [
+        {"search_term_contains": "salt", "package_quantity": 1},
+        {"search_term_contains": "pepper", "package_quantity": 1}
+      ]
+    },
+    {
+      "raw": "Cilantro, parsley, or mint, preferably a mixture",
+      "parse": {"food_contains": "cilantro"},
+      "products": [
+        {"search_term_contains": "cilantro", "must_contain": "fresh"},
+        {"search_term_contains": "parsley", "must_contain": "fresh"},
+        {"search_term_contains": "mint", "must_contain": "fresh"}
+      ]
+    },
+    {
+      "raw": "2 lb boneless skinless chicken thighs",
+      "parse": {"quantity": 2, "unit": "lb", "food": "chicken thigh"},
+      "products": [{"search_term_contains": "chicken thigh", "target_size_contains": "2", "package_quantity": 1}]
+    },
+    {
+      "raw": "2 cans (14 oz) diced tomatoes",
+      "parse": {"quantity": 2, "unit": "can", "food": "diced tomato"},
+      "products": [{"search_term_contains": "tomato", "package_quantity": 2}]
+    },
+    {
+      "raw": "1 courgette, grated",
+      "parse": {"quantity": 1, "food": "courgette"},
+      "products": [{"search_term_contains": "zucchini", "must_contain": "fresh", "package_quantity": 1}]
+    },
+    {
+      "raw": "200 ml double cream",
+      "parse": {"quantity": 200, "unit": "ml", "food": "double cream"},
+      "products": [{"search_term_contains": "heavy cream", "package_quantity": 1}]
+    }
+  ]
+}
