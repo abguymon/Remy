@@ -1,32 +1,37 @@
-import { useEffect, useState } from 'react'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import AppShell from './components/AppShell'
+import Login from './screens/Login'
+import Stub from './screens/Stub'
+import NotFound from './screens/NotFound'
+import PlanFlow from './screens/plan/PlanFlow'
+import { useAuth } from './stores/auth'
 
-type Health = { status: string; version: string }
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  const token = useAuth((s) => s.token)
+  const location = useLocation()
+  if (!token) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  }
+  return <>{children}</>
+}
 
 export default function App() {
-  const [health, setHealth] = useState<Health | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    fetch('/api/health')
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then(setHealth)
-      .catch((e: Error) => setError(e.message))
-  }, [])
-
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center gap-3 bg-stone-50 text-stone-800">
-      <h1 className="text-3xl font-semibold">Remy</h1>
-      <p className="text-stone-500">v2 scaffold — the app is being rebuilt.</p>
-      <p className="text-sm text-stone-400">
-        API:{' '}
-        {health ? (
-          <span className="text-green-600">healthy (v{health.version})</span>
-        ) : error ? (
-          <span className="text-red-600">unreachable ({error})</span>
-        ) : (
-          <span>checking…</span>
-        )}
-      </p>
-    </main>
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route
+        element={
+          <RequireAuth>
+            <AppShell />
+          </RequireAuth>
+        }
+      >
+        <Route index element={<PlanFlow />} />
+        <Route path="cookbook" element={<Stub title="Cookbook" glyph="📖" />} />
+        <Route path="cart" element={<Stub title="Cart" glyph="🛒" />} />
+        <Route path="settings" element={<Stub title="Settings" glyph="⚙" />} />
+        <Route path="*" element={<NotFound />} />
+      </Route>
+    </Routes>
   )
 }
