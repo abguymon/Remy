@@ -18,7 +18,7 @@ from remy_api.config import get_settings
 from remy_api.db import dispose_engine, init_db
 from remy_api.errors import register_error_handlers
 from remy_api.kroger import close_client, register_kroger_error_handler
-from remy_api.routers import auth, kroger, users
+from remy_api.routers import auth, kroger, recipes, users
 
 # Fail closed: importing the app validates required secrets. A misconfigured
 # container exits here with a clear ConfigError rather than starting.
@@ -50,6 +50,7 @@ register_kroger_error_handler(app)
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(kroger.router)
+app.include_router(recipes.router)
 
 
 @app.get("/health")

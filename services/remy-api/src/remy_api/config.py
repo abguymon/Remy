@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     # --- Database ---
     database_url: str = "sqlite+aiosqlite:///data/remy.db"
 
+    # --- Recipe images (T3) ---
+    # Downloaded, re-encoded recipe images live here; never hotlinked (PRD §5).
+    recipe_images_dir: str = "data/recipe-images"
+
     # --- Kroger ---
     kroger_client_id: str = ""
     kroger_client_secret: str = ""
