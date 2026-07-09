@@ -4,6 +4,7 @@
 // every screen.
 import { NavLink, Outlet } from 'react-router-dom'
 import { ToastHost } from './ui'
+import RatIcon from './RatIcon'
 
 const TABS = [
   { to: '/', label: 'Plan', glyph: '🍳', end: true },
@@ -17,7 +18,10 @@ export default function AppShell() {
     <div className="mx-auto flex h-full max-w-[1200px] flex-row bg-cream">
       {/* Desktop sidebar */}
       <aside className="hidden w-[230px] flex-none flex-col gap-1.5 border-r border-line bg-surface px-4 py-6 lg:flex">
-        <div className="font-serif text-2xl font-semibold tracking-tight px-2 pb-4">Remy</div>
+        <div className="flex items-center gap-2 px-2 pb-4">
+          <RatIcon size={26} hole="#FFFFFF" className="text-terracotta" />
+          <span className="font-serif text-2xl font-semibold tracking-tight">Remy</span>
+        </div>
         {TABS.map((t) => (
           <NavLink
             key={t.to}

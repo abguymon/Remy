@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 68 64">
+  <!-- Remy mark: a simple sitting rat, terracotta on transparent -->
+  <g fill="#C05B3B">
+    <circle cx="28" cy="18" r="8"/>
+    <path d="M4 44 C 8 34, 18 26, 28 25 C 42 23, 54 30, 56 40 C 57 48, 51 54, 41 55 L 18 55 C 10 55, 2 50, 4 44 Z"/>
+  </g>
+  <circle cx="28" cy="18" r="3.5" fill="#F6F0E8"/>
+  <circle cx="16" cy="42" r="2.6" fill="#F6F0E8"/>
+  <path d="M55 47 C 64 50, 65 58, 55 59 C 48 60, 46 56, 48 53" fill="none" stroke="#C05B3B" stroke-width="4" stroke-linecap="round"/>
+</svg>

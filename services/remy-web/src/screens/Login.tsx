@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { ApiError } from '../lib/api'
 import { useLogin } from '../lib/queries'
 import { useAuth } from '../stores/auth'
+import RatIcon from '../components/RatIcon'
 import { Button } from '../components/ui'
 
 export default function Login() {
@@ -42,6 +43,7 @@ export default function Login() {
       style={{ background: 'linear-gradient(180deg,#F6F0E8 0%,#F1E7D8 100%)' }}
     >
       <div className="mb-8 text-center">
+        <RatIcon size={56} hole="#F4EDE1" className="mx-auto mb-2 text-terracotta" />
         <div className="font-serif text-[52px] font-semibold tracking-tight text-ink">Remy</div>
         <div className="mt-1.5 text-[14.5px] text-muted">Meals in, groceries out.</div>
       </div>
