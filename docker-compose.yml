@@ -19,11 +19,17 @@ services:
       - .env
     environment:
       DATABASE_URL: sqlite+aiosqlite:///data/remy.db
+      # Seed sources for new users' default settings (PRD §6, FR-23/FR-24).
+      PANTRY_FILE: /app/seed/pantry.yaml
+      RECIPE_SOURCES_FILE: /app/seed/recipe_sources.yaml
     ports:
       - "8080:8080"
     volumes:
       # Shared data volume: SQLite DB + recipe images
       - ./data:/app/data
+      # Seed defaults (read-only) — single source of truth at repo root
+      - ./pantry.yaml:/app/seed/pantry.yaml:ro
+      - ./recipe_sources.yaml:/app/seed/recipe_sources.yaml:ro
     networks:
       - remy-net
 

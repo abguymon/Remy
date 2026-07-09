@@ -1,14 +1,8 @@
 """Health endpoint smoke test."""
 
-from fastapi.testclient import TestClient
 
-from remy_api.main import app
-
-client = TestClient(app)
-
-
-def test_health_ok():
-    resp = client.get("/health")
+async def test_health_ok(client):
+    resp = await client.get("/health")
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] == "ok"
