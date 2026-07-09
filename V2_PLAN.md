@@ -14,10 +14,10 @@ Task breakdown for implementing `PRD.md` + `DESIGN_BRIEF.md`. Each task below is
 
 ## Phase 0 — Repo preparation
 
-### ☐ T0: Restructure repo for v2
+### ☑ T0: Restructure repo for v2
 Move the existing implementation to `legacy/` (`git mv services legacy-services` → `legacy/services`, plus `ARCHITECTURE.md`, `remy_spec.md`, `PLAN.md` → `legacy/`). Keep at root: `PRD.md`, `DESIGN_BRIEF.md`, `V2_PLAN.md`, `.env.template` (rewrite per PRD §8), `pantry.yaml` (copy from `legacy/services/remy-agent/pantry.yaml` — it seeds pantry defaults), `recipe_sources.yaml` (seeds favorite sites). Scaffold the new tree: `services/remy-api` (FastAPI app skeleton with `/health`, config loading that **fails closed** on missing `JWT_SECRET`/`ENCRYPTION_KEY`, ruff + pytest wired) and `services/remy-web` (Vite + React 18 + TS + Tailwind skeleton). New `docker-compose.yml` with the two services + shared `data/` volume, preserving the Traefik labels from the legacy compose file. Update `CLAUDE.md` to describe the v2 layout and point to the three docs.
 **Done when:** `docker compose up` serves a healthy API and a blank web app; missing env secrets abort startup with a clear message.
-Status notes: —
+Status notes: Done. POC moved to `legacy/` (services + old compose + POC docs); root seeds `.env.template` (PRD §8), `pantry.yaml`, `recipe_sources.yaml`; scaffolded `services/remy-api` (FastAPI `/health`, fail-closed config, ruff+pytest 6/6 green) and `services/remy-web` (Vite/React18/TS/Tailwind); new two-service `docker-compose.yml` — `docker compose build && up` verified healthy (API on :8080, web on :3000, `/api/` proxy round-trips) and boot aborts with a clear ConfigError when JWT_SECRET/ENCRYPTION_KEY are missing.
 
 ## Phase 1 — Backend foundation
 

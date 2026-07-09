@@ -1,34 +1,29 @@
-# Remy API
+# remy-api
 
-FastAPI backend for Remy - AI Grocery Planning Agent.
+FastAPI backend for Remy v2. See `../../PRD.md` (authoritative spec) and
+`../../V2_PLAN.md` for the build plan. This is the T0 scaffold: a `/health`
+endpoint and fail-closed config loading. Modules (auth, planner, recipes,
+kroger, llm, websearch, mcp) land in later tasks.
 
-## Features
-
-- JWT authentication
-- Multi-tenant user management
-- LangGraph workflow orchestration
-- WebSocket streaming for real-time updates
-- Integration with Kroger and Mealie MCP servers
-
-## Development
+## Develop
 
 ```bash
-# Install dependencies
-uv sync
-
-# Run locally
-uv run uvicorn remy_api.main:app --reload --port 8080
-
-# Run tests
-uv run pytest
+uv sync --extra dev            # or: pip install -e ".[dev]"
+export JWT_SECRET=$(python -c "import secrets; print(secrets.token_hex(32))")
+export ENCRYPTION_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+uvicorn remy_api.main:app --host 0.0.0.0 --port 8080 --reload
 ```
 
-## API Endpoints
+## Lint & test
 
-- `POST /auth/register` - Create account with invite code
-- `POST /auth/login` - Get JWT token
-- `GET /users/me` - Current user profile
-- `GET /users/me/settings` - User settings
-- `PUT /users/me/settings` - Update settings
-- `PUT /users/me/mealie` - Connect Mealie account
-- `GET /health` - Health check
+```bash
+ruff check src tests
+ruff format --check src tests
+pytest
+```
+
+## Config
+
+Settings load from environment / `.env` (see `../../.env.template`).
+`JWT_SECRET` and `ENCRYPTION_KEY` are **required** — the app refuses to start
+if either is missing, empty, or a placeholder (PRD §9.5).

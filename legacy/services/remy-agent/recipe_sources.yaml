@@ -1,0 +1,8 @@
+# Favorite recipe sources to always search
+# These sites will be searched in addition to your Mealie library and general web search
+
+favorite_sources:
+  - name: Serious Eats
+    domain: seriouseats.com
+  - name: Cookie and Kate
+    domain: cookieandkate.com

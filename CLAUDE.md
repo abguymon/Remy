@@ -1,158 +1,116 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code (claude.ai/code) when working in this repository.
 
-## Project Overview
+## Authoritative docs — read these first
 
-Remy is a self-hosted, multi-tenant AI agent that automates grocery planning and ordering. It uses a React frontend, FastAPI backend with JWT auth, LangGraph for workflow orchestration, and MCP (Model Context Protocol) servers for external service integration.
+Remy is being rebuilt (v2). The specification lives in three root docs; they
+**override any code**, including anything under `legacy/`:
 
-## Build and Run Commands
+- **`PRD.md`** — product requirements & system spec (the source of truth).
+- **`DESIGN_BRIEF.md`** — visual/interaction spec for the frontend.
+- **`V2_PLAN.md`** — the task breakdown (T0…T10). Do one task per session,
+  follow its "Instructions for an implementing session", and update its
+  checkbox + status note when done. Appendix A reviews the legacy prompts.
+
+`legacy/` holds the proof-of-concept (old `services/`, `docker-compose.yml`,
+and design notes). It is **reference material only** — never import from it and
+never treat its behavior as a requirement where the PRD says otherwise.
+
+## Project overview
+
+Remy is a self-hosted, single-household (multi-user-ready) AI agent that turns
+a list of meals into a filled Kroger (Fred Meyer) pickup cart: discover recipes
+→ pick → consolidated shopping list → match to real Kroger products → add to the
+real cart, handing off to kroger.com for checkout. Selected recipes are saved to
+a local cookbook.
+
+## v2 architecture (PRD §4)
+
+Modular-monolith backend + a thin MCP facade. **Exactly two deployable
+services:**
+
+| Service  | Port | Purpose |
+|----------|------|---------|
+| remy-web | 3000 | React 18 + TypeScript + Vite + Tailwind (nginx in prod) |
+| remy-api | 8080 | FastAPI: auth, planner state machine, recipes, kroger, llm, websearch, and a mounted MCP facade |
+
+Kroger and recipe functionality are **internal Python modules** of `remy-api`,
+not separate containers. No Mealie, no MCP sidecars, no LangGraph (the plan flow
+is a plain DB-persisted state machine). The MCP facade (FastMCP mounted into
+FastAPI, flag `MCP_FACADE_ENABLED`, default on) is a first-class second UI that
+calls the same modules — never divergent logic.
+
+- **Access:** frontend http://localhost:3000, API http://localhost:8080.
+- **API proxy:** remy-web proxies `/api/*` → remy-api (vite dev proxy locally,
+  nginx `location /api/` in prod; the `/api` prefix is stripped).
+- **Data:** SQLite via async SQLAlchemy (Postgres-portable) + FTS5 for recipe
+  search; images and the DB live on the shared `./data` volume.
+
+## Build, run, test
 
 ```bash
-# Create Docker network (first time only)
+# First time only: create the docker networks
 docker network create remy-net
+docker network create t2_proxy   # Traefik reverse-proxy network
 
-# Build and run all services (default profile: remy-web, remy-api, kroger-mcp, mealie-mcp-server, mealie)
-docker-compose build
-docker-compose up -d
+# Configure
+cp .env.template .env            # fill in secrets (see PRD §8)
 
-# Run the legacy Streamlit UI (remy-agent) instead of / alongside the new stack
-docker-compose --profile legacy up remy-agent
+# Build & run the two-service stack
+docker compose build
+docker compose up -d
+curl localhost:8080/health       # {"status":"ok",...}
+# web on http://localhost:3000
 
-# View logs
-docker-compose logs -f [service-name]
+docker compose logs -f [remy-api|remy-web]
+docker compose down
 ```
 
-### Individual Service Development
-
-Each service uses `uv` or `pip` with hatchling:
+### remy-api (local dev)
 
 ```bash
-# Install dependencies for a service
 cd services/remy-api
-uv sync  # or pip install -e .
+uv sync --extra dev              # or: pip install -e ".[dev]"
+export JWT_SECRET=$(python -c "import secrets; print(secrets.token_hex(32))")
+export ENCRYPTION_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+uvicorn remy_api.main:app --host 0.0.0.0 --port 8080 --reload
 
-# Run remy-api locally (requires MCP servers running)
-uvicorn remy_api.main:app --host 0.0.0.0 --port 8080
+ruff check src tests && ruff format --check src tests
+pytest
+```
 
-# Run remy-web locally
+`JWT_SECRET` and `ENCRYPTION_KEY` are **required** — the API refuses to boot if
+either is missing, empty, or a placeholder (fail-closed, PRD §9.5).
+
+### remy-web (local dev)
+
+```bash
 cd services/remy-web
 npm install
-npm run dev  # Vite dev server on port 5173
-
-# Run kroger-mcp locally
-cd services/kroger-mcp
-python docker_entrypoint.py
-
-# Run mealie-mcp-server locally
-cd services/mealie-mcp-server
-python docker_entrypoint.py
-
-# Legacy: Run remy-agent (Streamlit) locally
-cd services/remy-agent
-streamlit run src/remy_agent/app.py
+npm run dev                      # Vite dev server on :3000, proxies /api → :8080
+npm run build                    # type-check + production build
 ```
 
-## Architecture
+## Configuration (PRD §8)
 
-### Services
+Copy `.env.template` → `.env`:
+`JWT_SECRET`, `ENCRYPTION_KEY` (Fernet), `KROGER_CLIENT_ID`/`SECRET`,
+`KROGER_REDIRECT_URI`, `LLM_PROVIDER`/`LLM_MODEL` + provider key,
+`SEARCH_PROVIDER`/`SEARCH_API_KEY`, `MCP_FACADE_ENABLED`.
 
-| Service | Port | Purpose |
-|---------|------|---------|
-| remy-web | 3000 | React + TypeScript + Vite frontend (login, recipe search, cart, settings) |
-| remy-api | 8080 | FastAPI backend (JWT auth, SQLAlchemy, LangGraph orchestrator) |
-| kroger-mcp | 8001 | FastMCP server for Kroger shopping API |
-| mealie-mcp-server | 8000 | MCP server for Mealie recipe database |
-| mealie | 9925 | Recipe database (external dependency) |
-| remy-agent | 8501 | **Legacy** Streamlit UI + LangGraph orchestrator (only runs with `--profile legacy`) |
+Seed configs at the repo root: `pantry.yaml` (pantry-staple defaults, FR-11) and
+`recipe_sources.yaml` (favorite recipe sites, FR-24).
 
-### Access URLs
+## Conventions
 
-- **Frontend**: http://localhost:3000
-- **API**: http://localhost:8080
-- **Mealie**: http://localhost:9925
-
-### Service Communication
-
-All MCP servers use SSE (Server-Sent Events) transport. In Docker:
-- Mealie MCP: `http://mealie-mcp-server:8000/sse`
-- Kroger MCP: `http://kroger-mcp:8000/sse`
-
-The React frontend proxies API calls through `/api/*` to `remy-api:8080`.
-
-### LangGraph Workflow (remy-api / remy-agent)
-
-The workflow is defined in `services/remy-agent/src/remy_agent/graph.py` (legacy) and replicated in `services/remy-api/`:
-
-```
-START → search_recipes → [interrupt for user selection] → fetch_selected_recipes → filter_ingredients → [interrupt for approval] → execute_order → END
-```
-
-**State Definition** (`state.py`):
-- `messages`: Conversation history
-- `target_recipe_names`: Extracted recipe names from user input
-- `recipe_options`: Mealie + web search results for user selection
-- `selected_recipe_options`: User-selected recipes
-- `fetched_recipes`: Detailed recipe data
-- `raw_ingredients`: Extracted ingredients from recipes
-- `pending_cart`: Filtered ingredients for approval
-- `pantry_items`: Ingredients matched to pantry bypass list
-- `approved_cart`: User-approved items
-- `fulfillment_method`: "PICKUP" or "DELIVERY"
-- `preferred_store_id`: Kroger store location ID
-- `order_result`: Final Kroger API response
-
-**Node Implementations** (`nodes.py`):
-- `search_recipes_node`: Extract recipe names via LLM, search Mealie + web in parallel
-- `fetch_selected_recipes_node`: Fetch detailed recipe data, import web recipes into Mealie
-- `filter_ingredients_node`: Filter against pantry bypass items
-- `execute_order_node`: Batch extract product names, add approved items to Kroger cart in parallel
-
-### Multi-Tenant Isolation (remy-api)
-
-Each user has isolated:
-- **SQLite checkpoint database**: `data/checkpoints/{user_id}.sqlite`
-- **User settings in database**: pantry items, store preferences
-- **Kroger tokens** (via user_id parameter to MCP)
-- **Mealie API key** (stored in user settings)
-
-### Kroger MCP Tools
-
-Located in `services/kroger-mcp/src/kroger_mcp/tools/`:
-- `location_tools.py`: Store search, set preferred location
-- `product_tools.py`: Product search by term or ID
-- `cart_tools.py`: Add/remove items, view cart (tracked locally in kroger_cart.json)
-- `auth.py`: OAuth2 token handling with refresh
-
-### Mealie MCP Tools
-
-Located in `services/mealie-mcp-server/src/tools/`:
-- `recipe_tools.py`: Recipe fetch and search
-- `mealplan_tools.py`: Meal plan operations
-
-## Configuration
-
-### Environment Variables
-
-Copy `.env.template` to `.env` and configure:
-- `KROGER_CLIENT_ID`, `KROGER_CLIENT_SECRET`: Kroger API credentials
-- `KROGER_REDIRECT_URI`: OAuth redirect (default: `http://localhost:8080/kroger/callback`)
-- `MEALIE_BASE_URL`, `MEALIE_API_KEY`: Mealie instance connection
-- `OPENAI_API_KEY`: For GPT-4o LLM calls
-- `JWT_SECRET`: Secret key for JWT token signing
-- `INITIAL_INVITE_CODE`: Bootstrap invite code for the first user registration
-- `ENCRYPTION_KEY`: For encrypting sensitive data at rest
-
-### Pantry Bypass List
-
-`services/remy-agent/pantry.yaml` contains common staples (salt, pepper, olive oil, etc.) that are automatically filtered from cart additions. In the new architecture, pantry items are stored per-user in the database.
-
-## Key Implementation Details
-
-- LLM: GPT-4o with temperature=0 for deterministic outputs
-- MCP client uses `mcp.client.sse.sse_client` and `mcp.client.session.ClientSession`
-- Kroger auth tokens stored per-user with automatic refresh
-- Local cart tracking in JSON files (not synced to Kroger until checkout)
-- Frontend: React 18 + TypeScript + Vite + Tailwind CSS
-- Backend: FastAPI + SQLAlchemy (async) + JWT authentication
-- Database: SQLite via aiosqlite (users, settings, kroger tokens, invite codes)
+- **No silent failures** (PRD §9.1): every integration call succeeds, raises a
+  typed error surfaced to the API, or returns an explicit degraded-result
+  marker. Never swallow errors into empty results.
+- **Structured LLM outputs everywhere** (PRD §7.1): Pydantic-validated
+  tool-use/JSON-schema responses with one retry; no regex/fence-stripping of
+  prose. Prompts live in the prompt library, not inline.
+- **Bounded async concurrency** for all fan-out work (semaphore ~5–8).
+- **Honest cart semantics:** the Kroger public API is add-only (no read, remove,
+  or checkout). Any in-app cart is a local shadow record — label it as such.
+- Python 3.12+, ruff (line length 120), pytest. Backend package: `remy_api`.

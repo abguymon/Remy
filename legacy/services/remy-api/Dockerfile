@@ -1,23 +1,28 @@
-FROM python:3.12-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
-# curl for the healthcheck; uv for fast installs
+# Install curl for healthcheck and uv for faster package installation
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 RUN pip install uv
 
-# Install dependencies (leverages layer caching)
+# Copy project files
 COPY pyproject.toml README.md ./
 COPY src/ src/
+
+# Install dependencies
 RUN uv pip install --system -e .
 
-# Data volume (SQLite DB, recipe images) lives here
-RUN mkdir -p data
+# Create data directory
+RUN mkdir -p data/checkpoints
 
-# Non-root runtime user
-RUN useradd --create-home --shell /bin/bash appuser && chown -R appuser:appuser /app
+# Create non-root user and set ownership
+RUN useradd --create-home --shell /bin/bash appuser && \
+    chown -R appuser:appuser /app
 
 VOLUME ["/app/data"]
+
+# Expose port
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
@@ -25,4 +30,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 USER appuser
 
+# Run the application
 CMD ["uvicorn", "remy_api.main:app", "--host", "0.0.0.0", "--port", "8080"]

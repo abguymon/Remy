@@ -1,43 +1,32 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
-import { useAuthStore } from './store/auth'
-import Layout from './components/Layout'
-import Login from './pages/Login'
-import Register from './pages/Register'
-import Home from './pages/Home'
-import Cart from './pages/Cart'
-import Settings from './pages/Settings'
-import NotFound from './pages/NotFound'
+import { useEffect, useState } from 'react'
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const token = useAuthStore((state) => state.token)
+type Health = { status: string; version: string }
 
-  if (!token) {
-    return <Navigate to="/login" replace />
-  }
+export default function App() {
+  const [health, setHealth] = useState<Health | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
-  return <>{children}</>
-}
+  useEffect(() => {
+    fetch('/api/health')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then(setHealth)
+      .catch((e: Error) => setError(e.message))
+  }, [])
 
-function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <Layout />
-          </ProtectedRoute>
-        }
-      >
-        <Route index element={<Home />} />
-        <Route path="cart" element={<Cart />} />
-        <Route path="settings" element={<Settings />} />
-      </Route>
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+    <main className="min-h-screen flex flex-col items-center justify-center gap-3 bg-stone-50 text-stone-800">
+      <h1 className="text-3xl font-semibold">Remy</h1>
+      <p className="text-stone-500">v2 scaffold — the app is being rebuilt.</p>
+      <p className="text-sm text-stone-400">
+        API:{' '}
+        {health ? (
+          <span className="text-green-600">healthy (v{health.version})</span>
+        ) : error ? (
+          <span className="text-red-600">unreachable ({error})</span>
+        ) : (
+          <span>checking…</span>
+        )}
+      </p>
+    </main>
   )
 }
-
-export default App

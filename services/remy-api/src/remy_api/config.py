@@ -1,56 +1,130 @@
-"""Application configuration"""
+"""Application configuration.
+
+Settings load from the environment (and a local ``.env`` in development).
+Security-critical secrets (``JWT_SECRET``, ``ENCRYPTION_KEY``) are validated
+**fail-closed**: startup aborts with a clear message if they are missing,
+empty, or a known placeholder value (PRD §6, §9.5).
+"""
+
+from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic_settings import BaseSettings
+from cryptography.fernet import Fernet
+from pydantic import ValidationInfo, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Placeholder tokens that must never survive into a running deployment. Matched
+# case-insensitively as substrings so common template values are all rejected.
+_PLACEHOLDER_MARKERS = (
+    "change_me",
+    "changeme",
+    "your_",
+    "_here",
+    "placeholder",
+    "example",
+    "todo",
+)
+
+
+class ConfigError(RuntimeError):
+    """Raised at startup when required configuration is missing or unsafe."""
+
+
+def _looks_like_placeholder(value: str) -> bool:
+    lowered = value.strip().lower()
+    return any(marker in lowered for marker in _PLACEHOLDER_MARKERS)
 
 
 class Settings(BaseSettings):
-    """Application settings loaded from environment variables"""
+    """Application settings loaded from environment variables."""
 
-    # API Settings
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    # --- App ---
     api_title: str = "Remy API"
-    api_version: str = "0.1.0"
+    api_version: str = "0.2.0"
     debug: bool = False
 
-    # JWT Settings
-    jwt_secret: str = "CHANGE_ME_IN_PRODUCTION"
+    # --- Auth & crypto (required, fail-closed) ---
+    jwt_secret: str = ""
     jwt_algorithm: str = "HS256"
     jwt_expire_hours: int = 168  # 7 days
-
-    # Database
-    database_url: str = "sqlite+aiosqlite:///data/remy.db"
-
-    # MCP Server URLs
-    kroger_mcp_url: str = "http://kroger-mcp:8000/sse"
-    mealie_mcp_url: str = "http://mealie-mcp-server:8000/sse"
-    mealie_external_url: str = "http://localhost:9925"
-
-    # Kroger OAuth
-    kroger_redirect_uri: str = "http://localhost:8080/kroger/callback"
-
-    # Frontend URL (for post-OAuth redirect)
-    frontend_url: str = "http://localhost:3000"
-
-    # Encryption key for sensitive data at rest (Fernet key)
-    # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     encryption_key: str = ""
 
-    # OpenAI
-    openai_api_key: str = ""
+    # --- Database ---
+    database_url: str = "sqlite+aiosqlite:///data/remy.db"
 
-    # CORS
+    # --- Kroger ---
+    kroger_client_id: str = ""
+    kroger_client_secret: str = ""
+    kroger_redirect_uri: str = "http://localhost:8080/kroger/callback"
+
+    # --- LLM (provider-agnostic) ---
+    llm_provider: str = "anthropic"
+    llm_model: str = "claude-sonnet-4-5"
+
+    # --- Web search ---
+    search_provider: str = "brave"
+    search_api_key: str = ""
+
+    # --- MCP facade ---
+    mcp_facade_enabled: bool = True
+
+    # --- CORS (dev) ---
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
 
-    # Initial admin setup (for bootstrapping)
-    initial_invite_code: str | None = None  # Set to create initial invite code
+    @field_validator("jwt_secret", "encryption_key")
+    @classmethod
+    def _require_secret(cls, value: str, info: ValidationInfo) -> str:
+        name = info.field_name or "secret"
+        if not value or not value.strip():
+            raise ConfigError(
+                f"{name.upper()} is required but missing or empty. "
+                "Set a real value in .env (see .env.template). Refusing to start."
+            )
+        if _looks_like_placeholder(value):
+            raise ConfigError(
+                f"{name.upper()} is set to a placeholder value. "
+                "Generate a real secret (see .env.template). Refusing to start."
+            )
+        return value
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    @field_validator("encryption_key")
+    @classmethod
+    def _validate_fernet_key(cls, value: str) -> str:
+        # Only reached once the required-secret check above has passed.
+        try:
+            Fernet(value.encode())
+        except (ValueError, TypeError) as exc:
+            raise ConfigError(
+                "ENCRYPTION_KEY is not a valid Fernet key. Generate one with: "
+                'python -c "from cryptography.fernet import Fernet; '
+                'print(Fernet.generate_key().decode())". Refusing to start.'
+            ) from exc
+        return value
 
 
 @lru_cache
 def get_settings() -> Settings:
-    """Get cached settings instance"""
-    return Settings()
+    """Return the cached settings instance, validating fail-closed on first use.
+
+    Raises :class:`ConfigError` with an actionable message if required secrets
+    are missing or unsafe. Pydantic wraps validator errors in a
+    ``ValidationError``; we unwrap the underlying :class:`ConfigError` so the
+    startup message is clean.
+    """
+    from pydantic import ValidationError
+
+    try:
+        return Settings()
+    except ValidationError as exc:
+        for err in exc.errors():
+            cause = err.get("ctx", {}).get("error")
+            if isinstance(cause, ConfigError):
+                raise cause from exc
+        raise

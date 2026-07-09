@@ -1,8 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// Dev server proxies /api/* to remy-api. The prefix is stripped so the API
-// sees root-relative paths (mirrors nginx.conf in production).
 export default defineConfig({
   plugins: [react()],
   server: {

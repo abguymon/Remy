@@ -4,6 +4,9 @@ __pycache__/
 *.pyc
 .DS_Store
 
-# User-specific settings (copy from .template files)
-services/remy-agent/user_settings.yaml
-services/remy-agent/uv.lock
+# Runtime data volume (SQLite DB, recipe images)
+data/
+
+# Node
+node_modules/
+dist/

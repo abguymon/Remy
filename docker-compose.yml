@@ -1,89 +1,29 @@
+# Remy v2 — two deployable services only (PRD §4, §8).
+# Kroger and recipe functionality are internal modules of remy-api, not
+# separate containers. No Mealie, no MCP sidecars.
+
 networks:
+  # Reverse-proxy network (Traefik). Create once: docker network create t2_proxy
   t2_proxy:
     external: true
+  # Internal service network. Create once: docker network create remy-net
   remy-net:
+    external: true
 
 services:
-  mealie:
-    image: ghcr.io/mealie-recipes/mealie:latest
-    container_name: mealie
-    restart: always
-    ports:
-      - "9925:9000"
-    environment:
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-    deploy:
-      resources:
-        limits:
-          memory: 1000M
-    volumes:
-      - mealie-data:/app/data/
-    networks:
-      - remy-net
-
-  mealie-mcp-server:
-    build: ./services/mealie-mcp-server
-    container_name: mealie-mcp-server
-    restart: always
-    environment:
-      MEALIE_BASE_URL: ${MEALIE_BASE_URL}
-      MEALIE_API_KEY: ${MEALIE_API_KEY}
-    networks:
-      - remy-net
-
-  kroger-mcp:
-    build: ./services/kroger-mcp
-    container_name: kroger-mcp
-    restart: always
-    environment:
-      KROGER_CLIENT_ID: ${KROGER_CLIENT_ID}
-      KROGER_CLIENT_SECRET: ${KROGER_CLIENT_SECRET}
-      KROGER_REDIRECT_URI: ${KROGER_REDIRECT_URI}
-    volumes:
-      - kroger-data:/app/data
-    networks:
-      - remy-net
-
-  # Legacy Streamlit UI (can be removed after migration)
-  remy-agent:
-    build: ./services/remy-agent
-    container_name: remy-agent
-    restart: always
-    environment:
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      MEALIE_MCP_URL: http://mealie-mcp-server:8000/sse
-      KROGER_MCP_URL: http://kroger-mcp:8000/sse
-      MEALIE_EXTERNAL_URL: http://localhost:9925
-    volumes:
-      - remy-data:/app/data
-    depends_on:
-      - mealie-mcp-server
-      - kroger-mcp
-    networks:
-      - remy-net
-    profiles:
-      - legacy
-
   remy-api:
     build: ./services/remy-api
     container_name: remy-api
     restart: always
+    env_file:
+      - .env
     environment:
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      JWT_SECRET: ${JWT_SECRET}
-      INITIAL_INVITE_CODE: ${INITIAL_INVITE_CODE:-}
-      KROGER_MCP_URL: http://kroger-mcp:8000/sse
-      MEALIE_MCP_URL: http://mealie-mcp-server:8000/sse
-      MEALIE_EXTERNAL_URL: http://localhost:9925
-      KROGER_REDIRECT_URI: ${KROGER_REDIRECT_URI:-http://localhost:8080/kroger/callback}
-      FRONTEND_URL: ${FRONTEND_URL:-https://remy.$DOMAINNAME}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
       DATABASE_URL: sqlite+aiosqlite:///data/remy.db
+    ports:
+      - "8080:8080"
     volumes:
-      - remy-api-data:/app/data
-    depends_on:
-      - mealie-mcp-server
-      - kroger-mcp
+      # Shared data volume: SQLite DB + recipe images
+      - ./data:/app/data
     networks:
       - remy-net
 
@@ -94,6 +34,8 @@ services:
         VITE_API_URL: /api
     container_name: remy-web
     restart: always
+    ports:
+      - "3000:80"
     depends_on:
       - remy-api
     networks:
@@ -110,9 +52,3 @@ services:
       ## Service
       - "traefik.http.routers.remy-rtr.service=remy-svc"
       - "traefik.http.services.remy-svc.loadbalancer.server.port=80"
-
-volumes:
-  mealie-data:
-  kroger-data:
-  remy-data:
-  remy-api-data:
