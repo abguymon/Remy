@@ -52,10 +52,22 @@ the number of PACKAGES to buy (not the recipe amount).
    "14 oz") so ranking can prefer the right package. Omit when quantity is
    count-based (e.g. "2 limes") or unknowable.
 
-6. Multi-product expansion: one line can yield multiple products.
-   - "salt and pepper" -> two products (salt; black pepper).
-   - "cilantro, parsley, or mint (a mixture)" -> all three.
-   - Join words: "and", "or", commas, "mixture".
+6. Multiple options: decide ALTERNATIVES vs. ADDITIONS.
+   - "or" (and parenthetical "(or X)") means ALTERNATIVES — the recipe accepts
+     any one. Extract exactly ONE product: the FIRST-listed option. Do NOT buy
+     every option.
+       - "potatoes (russet or Yukon gold)" -> russet potatoes ONLY (one product).
+       - "1 cup milk (or cream)" -> milk ONLY (one product).
+       - "butter or margarine" -> butter ONLY.
+   - "and" means ADDITIONS — the recipe needs both. Extract EACH as its own
+     product.
+       - "salt and pepper" -> two products (salt; black pepper).
+   - EXCEPTION — the line explicitly asks for MULTIPLE at once
+     ("preferably a mixture", "a mix of all", "any combination"): extract ALL
+     the listed options even when joined by "or".
+       - "cilantro, parsley, or mint, preferably a mixture" -> all three.
+   - Commas that just list alternatives follow the "or" rule (one product);
+     commas inside an explicit-mixture line follow the exception (all options).
 
 7. "to taste" / garnish / unquantified -> qty 1 (one package).
 

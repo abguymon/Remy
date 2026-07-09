@@ -6,6 +6,7 @@ import { useMemo } from 'react'
 import type { ExecItem, PlanSnapshot } from '../../lib/types'
 import { money } from '../../lib/format'
 import { Button, EmptyState, SectionLabel } from '../../components/ui'
+import { sourceFor } from './Step3Cart'
 
 export default function Step4Done({
   snapshot,
@@ -15,6 +16,19 @@ export default function Step4Done({
   onFinish: () => void
 }) {
   const exec = snapshot.execution
+
+  // Attribution per executed row: map its UPC back to the cart item's source
+  // recipe title(s) (exec items carry only a UPC, cart items carry line_id).
+  const titlesByUpc = useMemo(() => {
+    const map = new Map<string, string[]>()
+    for (const item of snapshot.cart.items) {
+      const upc = item.chosen?.upc
+      if (!upc) continue
+      const src = sourceFor(snapshot, item.line_id)
+      if (src && src.titles.length > 0) map.set(upc, src.titles)
+    }
+    return map
+  }, [snapshot])
 
   const groups = useMemo(() => {
     const items = exec?.items ?? []
@@ -96,7 +110,14 @@ export default function Step4Done({
             {groups.added.map((i, idx) => (
               <div key={idx} className="flex items-center gap-2.5 border-b border-divider px-3.5 py-2.5 last:border-0">
                 <span className="text-success">✓</span>
-                <span className="flex-1 text-[13.5px] text-ink">{i.description}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13.5px] text-ink">{i.description}</span>
+                  {titlesByUpc.get(i.upc) && (
+                    <span className="block truncate text-[11.5px] text-hint">
+                      {titlesByUpc.get(i.upc)!.join(', ')}
+                    </span>
+                  )}
+                </span>
                 <span className="tab-fig text-[13.5px] font-semibold">{lineTotal(i)}</span>
               </div>
             ))}
@@ -108,9 +129,16 @@ export default function Step4Done({
             {groups.substituted.map((i, idx) => (
               <div key={idx} className="flex items-center gap-2.5 border-b border-divider px-3.5 py-2.5 last:border-0">
                 <span className="text-warn-dot">⚠</span>
-                <span className="flex-1 text-[13.5px] text-ink">
-                  {i.description}
-                  {i.reason && <span className="text-warn"> · {i.reason}</span>}
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13.5px] text-ink">
+                    {i.description}
+                    {i.reason && <span className="text-warn"> · {i.reason}</span>}
+                  </span>
+                  {titlesByUpc.get(i.upc) && (
+                    <span className="block truncate text-[11.5px] text-hint">
+                      {titlesByUpc.get(i.upc)!.join(', ')}
+                    </span>
+                  )}
                 </span>
                 <span className="tab-fig text-[13.5px] font-semibold">{lineTotal(i)}</span>
               </div>

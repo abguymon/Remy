@@ -21,6 +21,24 @@ import type { PillTone } from '../../components/ui'
 const RESOLVED = new Set(['matched', 'substituted', 'stock_unknown', 'not_found', 'failed'])
 const IN_CART = new Set(['matched', 'substituted', 'stock_unknown'])
 
+// Recipe attribution for a cart item: the raw ingredient line it came from plus
+// the recipe title(s) that contributed it (snapshot carries this via line_id →
+// shopping_list.lines[].contributing). Lets the reviewer see *why* an item is in
+// the cart — e.g. "1 cup milk (or cream) · Best Mashed Potatoes".
+export interface ItemSource {
+  raw: string
+  titles: string[]
+}
+
+export function sourceFor(snapshot: PlanSnapshot, lineId: string): ItemSource | null {
+  const line = snapshot.shopping_list.lines.find((l) => l.id === lineId)
+  if (!line || line.contributing.length === 0) return null
+  const raw = line.contributing[0].raw?.trim() || line.display
+  const titles = [...new Set(line.contributing.map((c) => c.recipe_title).filter(Boolean))]
+  if (!raw && titles.length === 0) return null
+  return { raw, titles }
+}
+
 export default function Step3Cart({ snapshot, live }: { snapshot: PlanSnapshot; live: boolean }) {
   const cart = snapshot.cart
   const cartEdits = useCartEdits()
@@ -89,6 +107,7 @@ export default function Step3Cart({ snapshot, live }: { snapshot: PlanSnapshot; 
             <CartItemCard
               key={item.id}
               item={item}
+              source={sourceFor(snapshot, item.line_id)}
               live={live}
               busy={cartEdits.isPending || retry.isPending}
               onSetCount={(n) => applyEdit({ op: 'set_count', item_id: item.id, count: n })}
@@ -130,6 +149,7 @@ export default function Step3Cart({ snapshot, live }: { snapshot: PlanSnapshot; 
 
 function CartItemCard({
   item,
+  source,
   live,
   busy,
   onSetCount,
@@ -139,6 +159,7 @@ function CartItemCard({
   onRetry,
 }: {
   item: MatchItem
+  source: ItemSource | null
   live: boolean
   busy: boolean
   onSetCount: (n: number) => void
@@ -215,6 +236,7 @@ function CartItemCard({
               </div>
             </div>
             {chosen?.size && <div className="mt-0.5 text-[12px] text-faint">{chosen.size}</div>}
+            {source && <SourceLine source={source} />}
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               <StatusPill tone={pill.tone}>{pill.label}</StatusPill>
               {item.status === 'substituted' && (
@@ -333,6 +355,17 @@ function CartItemCard({
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// Muted attribution line: the raw ingredient text (truncated) · recipe title(s).
+function SourceLine({ source }: { source: ItemSource }) {
+  const suffix = source.titles.length > 0 ? ` · ${source.titles.join(', ')}` : ''
+  return (
+    <div className="mt-1 truncate text-[11.5px] text-hint" title={`${source.raw}${suffix}`}>
+      <span className="italic">{source.raw}</span>
+      {suffix}
     </div>
   )
 }

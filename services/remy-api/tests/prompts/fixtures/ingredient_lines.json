@@ -67,6 +67,16 @@
       "raw": "200 ml double cream",
       "parse": {"quantity": 200, "unit": "ml", "food": "double cream"},
       "products": [{"search_term_contains": "heavy cream", "package_quantity": 1}]
+    },
+    {
+      "raw": "4 pounds potatoes (russet or Yukon gold)",
+      "parse": {"quantity": 4, "unit": "lb", "food": "potato"},
+      "products": [{"search_term_contains": "russet", "product_count": 1}]
+    },
+    {
+      "raw": "1 cup milk (or cream)",
+      "parse": {"quantity": 1, "unit": "cup", "food": "milk"},
+      "products": [{"search_term_contains": "milk", "product_count": 1}]
     }
   ]
 }

@@ -148,6 +148,48 @@ async def test_p4_multi_product_expansion(llm_client):
     assert len(out.items[0].products) >= 2
 
 
+async def test_p4_or_is_a_single_alternative(llm_client):
+    """A plain 'or' between options means ALTERNATIVES: extract exactly one
+    product (the first-listed option), not one per option (real bug report:
+    russet-or-yukon potatoes produced two bags; milk-or-cream produced both).
+    """
+    out = await llm_client.structured(
+        product_extraction.render_batch(
+            product_extraction.ProductExtractionInput(
+                lines=[
+                    product_extraction.ParsedLine(quantity=4, unit="lb", food="potato", note="russet or Yukon gold"),
+                    product_extraction.ParsedLine(quantity=1, unit="cup", food="milk", note="or cream"),
+                ]
+            )
+        ),
+        product_extraction.ProductExtractionOutput,
+    )
+    by_index = {it.index: it for it in out.items}
+    potatoes = by_index[0].products
+    assert len(potatoes) == 1, f"expected one potato product, got {[p.search_term for p in potatoes]}"
+    assert "russet" in potatoes[0].search_term.lower()
+    milk = by_index[1].products
+    assert len(milk) == 1, f"expected one milk product, got {[p.search_term for p in milk]}"
+    assert "milk" in milk[0].search_term.lower()
+    assert "cream" not in milk[0].search_term.lower()
+
+
+async def test_p4_explicit_mixture_keeps_all_options(llm_client):
+    """The explicit-mixture exception: 'preferably a mixture' overrides 'or' and
+    keeps every listed option."""
+    out = await llm_client.structured(
+        product_extraction.render_batch(
+            product_extraction.ProductExtractionInput(
+                lines=[product_extraction.ParsedLine(food="cilantro", note="parsley, or mint, preferably a mixture")]
+            )
+        ),
+        product_extraction.ProductExtractionOutput,
+    )
+    terms = " ".join(p.search_term.lower() for p in out.items[0].products)
+    assert len(out.items[0].products) >= 3
+    assert "cilantro" in terms and "parsley" in terms and "mint" in terms
+
+
 # --- P5 product ranking -------------------------------------------------------
 
 
