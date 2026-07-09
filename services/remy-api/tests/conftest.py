@@ -44,10 +44,18 @@ def images_dir() -> str:
 
 
 async def _reset_schema() -> None:
+    from sqlalchemy import text
+
+    from remy_api.recipes import store as _store
+
     engine = get_engine()
     async with engine.begin() as conn:
+        # recipe_fts is a raw FTS5 virtual table (not in Base.metadata), so it must
+        # be dropped explicitly or stale rows leak across tests and skew search.
+        await conn.execute(text("DROP TABLE IF EXISTS recipe_fts"))
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
+    _store._fts_available = None
 
 
 @pytest_asyncio.fixture

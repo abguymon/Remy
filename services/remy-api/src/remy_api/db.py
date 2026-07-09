@@ -27,9 +27,15 @@ _session_factory: async_sessionmaker[AsyncSession] | None = None
 
 
 def _enable_sqlite_fk(dbapi_connection, _connection_record) -> None:  # noqa: ANN001
-    """Turn on ``PRAGMA foreign_keys`` for SQLite so cascades are honored."""
+    """Turn on ``PRAGMA foreign_keys`` for SQLite so cascades are honored.
+
+    Also set a ``busy_timeout`` so a background step task (T5 runs discover/match
+    as detached asyncio tasks with their own session) and a concurrent request
+    session serialize writes instead of failing with "database is locked".
+    """
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.execute("PRAGMA busy_timeout=5000")
     cursor.close()
 
 
