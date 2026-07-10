@@ -7,14 +7,18 @@ catching regressions in the behaviors Appendix A calls out.
 
 from __future__ import annotations
 
+import base64
+
 import pytest
 
+from remy_api.llm.prompt import ImagePart
 from remy_api.prompts import (
     ingredient_parsing,
     listicle_filter,
     meal_extraction,
     product_extraction,
     product_ranking,
+    recipe_from_images,
     saved_recipe_relevance,
 )
 from remy_api.prompts.listicle_filter import ListicleFilterInput, SearchCandidate
@@ -215,3 +219,71 @@ async def test_p5_none_acceptable_escape_hatch(llm_client):
     )
     out = await llm_client.structured(product_ranking.render(inp), product_ranking.ProductRankingOutput)
     assert out.none_acceptable is True
+
+
+# --- recipe_from_images (multimodal vision) -----------------------------------
+
+
+def _synthetic_recipe_image(lines: list[str]) -> ImagePart:
+    """Render short recipe text onto a plain image (no fixtures on disk)."""
+    import io
+
+    from PIL import Image, ImageDraw
+
+    img = Image.new("RGB", (900, 700), (255, 255, 255))
+    draw = ImageDraw.Draw(img)
+    y = 30
+    for line in lines:
+        draw.text((40, y), line, fill=(0, 0, 0))
+        y += 34
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=90)
+    return ImagePart(media_type="image/jpeg", data=base64.b64encode(buf.getvalue()).decode("ascii"))
+
+
+async def test_vision_transcribes_without_inventing(llm_client):
+    from remy_api.recipes.schemas import LLMRecipeExtraction
+
+    ingredients = [
+        "2 cups all-purpose flour",
+        "1 teaspoon baking soda",
+        "1 cup unsalted butter",
+        "3/4 cup brown sugar",
+        "2 large eggs",
+        "2 cups chocolate chips",
+    ]
+    lines = [
+        "Best Chocolate Chip Cookies",
+        "Makes 24 cookies",
+        "",
+        "Ingredients:",
+        *ingredients,
+        "",
+        "Instructions:",
+        "1. Cream butter and sugar.",
+        "2. Mix in eggs, then dry ingredients.",
+        "3. Fold in chocolate chips and bake at 375F for 10 minutes.",
+    ]
+    img = _synthetic_recipe_image(lines)
+    out = await llm_client.structured(
+        recipe_from_images.render(recipe_from_images.RecipeFromImagesInput(images=[img])),
+        LLMRecipeExtraction,
+    )
+    assert out.found is True
+    assert "chocolate chip cookies" in (out.title or "").lower()
+    # Exact ingredient count — no invented or dropped lines.
+    assert len(out.ingredients) == len(ingredients)
+    joined = " ".join(out.ingredients).lower()
+    assert "flour" in joined and "chocolate chips" in joined and "baking soda" in joined
+    assert len(out.instructions) == 3
+
+
+async def test_vision_reports_not_found_for_non_recipe(llm_client):
+    from remy_api.recipes.schemas import LLMRecipeExtraction
+
+    img = _synthetic_recipe_image(["Quarterly Sales Report", "Revenue up 12% year over year.", "Thanks, the team."])
+    out = await llm_client.structured(
+        recipe_from_images.render(recipe_from_images.RecipeFromImagesInput(images=[img])),
+        LLMRecipeExtraction,
+    )
+    assert out.found is False

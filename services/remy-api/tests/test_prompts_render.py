@@ -8,13 +8,14 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from remy_api.llm import RenderedPrompt
+from remy_api.llm import ImagePart, RenderedPrompt
 from remy_api.prompts import (
     ingredient_parsing,
     listicle_filter,
     meal_extraction,
     product_extraction,
     product_ranking,
+    recipe_from_images,
     saved_recipe_relevance,
 )
 from remy_api.prompts.listicle_filter import (
@@ -90,6 +91,45 @@ def test_product_ranking_render_includes_price_and_target_size():
     )
     p = product_ranking.render(inp)
     assert "1.19" in p.user and "15 oz" in p.user and "Target size" in p.user
+
+
+# --- recipe_from_images (multimodal) render -----------------------------------
+
+
+def _img(data: str = "Zm9v") -> ImagePart:
+    return ImagePart(media_type="image/jpeg", data=data)
+
+
+def test_recipe_from_images_render_carries_images_and_hint():
+    p = recipe_from_images.render(
+        recipe_from_images.RecipeFromImagesInput(images=[_img("aaa"), _img("bbb")], hint="the pasta on the left page")
+    )
+    assert isinstance(p, RenderedPrompt)
+    assert p.prompt_id == "recipe_from_images" and p.version >= 1
+    assert p.temperature == 0.0
+    # images ride on the rendered prompt as content parts for the client
+    assert [i.data for i in p.images] == ["aaa", "bbb"]
+    assert "2 image(s)" in p.user
+    assert "the pasta on the left page" in p.user
+    # anti-hallucination rules present in the system prompt
+    assert "[illegible]" in p.system and "found=false" in p.system
+
+
+def test_recipe_from_images_render_without_hint():
+    p = recipe_from_images.render(recipe_from_images.RecipeFromImagesInput(images=[_img()]))
+    assert len(p.images) == 1
+    assert "User hint" not in p.user
+
+
+def test_recipe_from_images_render_caps_image_count():
+    many = [_img(str(i)) for i in range(20)]
+    p = recipe_from_images.render(recipe_from_images.RecipeFromImagesInput(images=many))
+    assert len(p.images) == 10  # capped at _MAX_IMAGES
+
+
+def test_recipe_from_images_input_requires_at_least_one_image():
+    with pytest.raises(ValidationError):
+        recipe_from_images.RecipeFromImagesInput(images=[])
 
 
 # --- output-schema validation -------------------------------------------------

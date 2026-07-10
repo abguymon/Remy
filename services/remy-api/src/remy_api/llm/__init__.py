@@ -8,12 +8,13 @@ from remy_api.llm.errors import (
     LLMError,
     LLMValidationError,
 )
-from remy_api.llm.prompt import RenderedPrompt
+from remy_api.llm.prompt import ImagePart, RenderedPrompt
 
 __all__ = [
     "LLMClient",
     "get_llm_client",
     "RenderedPrompt",
+    "ImagePart",
     "LLMError",
     "LLMConfigError",
     "LLMAPIError",

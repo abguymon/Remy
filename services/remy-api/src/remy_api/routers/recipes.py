@@ -8,17 +8,23 @@ hotlinked, PRD §5).
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, File, Form, Query, UploadFile, status
 from fastapi.responses import FileResponse
 
 from remy_api.deps import CurrentUser, SessionDep
 from remy_api.errors import NotFoundError
+from remy_api.llm.client import get_llm_client
 from remy_api.llm.registry import get_prompt_id_llm
 from remy_api.models import Recipe
+from remy_api.prompts import recipe_extraction, recipe_from_images
 from remy_api.recipes import store
-from remy_api.recipes.images import download_recipe_image, image_path_for
+from remy_api.recipes.documents import MAX_FILES, RawUpload, build_extraction
+from remy_api.recipes.images import download_recipe_image, image_path_for, store_image_bytes
+from remy_api.recipes.llm_fallback import recipe_from_extraction
 from remy_api.recipes.schemas import (
     IngredientOut,
+    LLMRecipeExtraction,
+    ParsedRecipe,
     RecipeDetail,
     RecipeFromUrl,
     RecipeSummary,
@@ -100,6 +106,46 @@ async def create_recipe_from_url(payload: RecipeFromUrl, user: CurrentUser, sess
     recipe = await store.create_recipe(session, user.id, parsed)
     if parsed.image_url:
         stored = await download_recipe_image(recipe.id, parsed.image_url)
+        if stored:
+            recipe.image_path = stored
+            await session.commit()
+            await session.refresh(recipe)
+    return _to_detail(recipe)
+
+
+@router.post("/from-upload", response_model=RecipeDetail, status_code=status.HTTP_201_CREATED)
+async def create_recipe_from_upload(
+    user: CurrentUser,
+    session: SessionDep,
+    files: list[UploadFile] = File(..., description=f"1..{MAX_FILES} images and/or a PDF."),
+    hint: str | None = Form(default=None, description="Optional hint, e.g. 'the pasta recipe on the left page'."),
+) -> RecipeDetail:
+    """Create a recipe from uploaded photos or a PDF (FR-6).
+
+    Text-native PDFs route through the text-extraction prompt; images and
+    scanned PDFs route through the multimodal vision prompt. Either way the
+    result is validated (``found=false`` / incomplete raises a 422 with reasons,
+    matching ``/recipes/from-url``) and the first page/photo becomes the image.
+    """
+    uploads = [
+        RawUpload(filename=f.filename or "upload", content_type=f.content_type, data=await f.read()) for f in files
+    ]
+    extraction = build_extraction(uploads)
+
+    if extraction.mode == "text":
+        rendered = recipe_extraction.render(
+            recipe_extraction.RecipeExtractionInput(page_text=extraction.text or "", source_url="uploaded PDF")
+        )
+    else:
+        rendered = recipe_from_images.render(
+            recipe_from_images.RecipeFromImagesInput(images=extraction.images, hint=hint)
+        )
+    result = await get_llm_client().structured(rendered, LLMRecipeExtraction)
+    parsed: ParsedRecipe = recipe_from_extraction(result, source_url=None)
+
+    recipe = await store.create_recipe(session, user.id, parsed)
+    if extraction.cover_jpeg:
+        stored = store_image_bytes(recipe.id, extraction.cover_jpeg)
         if stored:
             recipe.image_path = stored
             await session.commit()

@@ -155,6 +155,19 @@ export function useCreateRecipeFromUrl() {
   })
 }
 
+export function useCreateRecipeFromUpload() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ files, hint }: { files: File[]; hint: string }) => {
+      const form = new FormData()
+      for (const file of files) form.append('files', file)
+      if (hint.trim()) form.append('hint', hint.trim())
+      return api.upload<RecipeDetail>('/recipes/from-upload', form)
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['recipes'] }),
+  })
+}
+
 export function useUpdateRecipe(id: string) {
   const qc = useQueryClient()
   return useMutation({

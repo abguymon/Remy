@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import litellm
 from pydantic import BaseModel, ValidationError
@@ -54,9 +54,9 @@ class LLMClient:
             LLMEmptyResponseError: the provider returned no content.
             LLMValidationError: output failed validation twice (initial + retry).
         """
-        messages: list[dict[str, str]] = [
+        messages: list[dict[str, Any]] = [
             {"role": "system", "content": prompt.system},
-            {"role": "user", "content": prompt.user},
+            {"role": "user", "content": self._user_content(prompt)},
         ]
 
         raw = await self._complete(messages, prompt.temperature, schema)
@@ -97,9 +97,25 @@ class LLMClient:
 
     # -- internals ---------------------------------------------------------
 
+    @staticmethod
+    def _user_content(prompt: RenderedPrompt) -> str | list[dict[str, Any]]:
+        """Build the user turn: a plain string, or content-parts when images.
+
+        Text-only prompts (the common case) keep the plain-string content
+        untouched. When ``prompt.images`` is non-empty, we emit LiteLLM's
+        standard multimodal content-parts (``text`` + ``image_url`` with a
+        ``data:`` URI), which routes correctly for ``openai/*`` and
+        ``anthropic/*`` models.
+        """
+        if not prompt.images:
+            return prompt.user
+        parts: list[dict[str, Any]] = [{"type": "text", "text": prompt.user}]
+        parts.extend({"type": "image_url", "image_url": {"url": img.data_uri()}} for img in prompt.images)
+        return parts
+
     async def _complete(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         temperature: float,
         schema: type[BaseModel],
     ) -> str:
