@@ -7,8 +7,12 @@ you pick one per meal, Remy builds a consolidated shopping list (merging
 duplicate ingredients and skipping pantry staples), you review and edit it, and
 Remy matches each item to the best real product at your preferred store and adds
 them to your Kroger cart for pickup — leaving the final checkout to you on
-kroger.com. It runs as a single household deployment behind your reverse proxy;
-all data stays local except calls to the Kroger, search, and LLM providers.
+your store's own site (fredmeyer.com, qfc.com, … — Remy links the right banner
+for your store). Selected recipes are saved to a personal cookbook you can also
+add to by pasting a URL or photographing a cookbook page / uploading a PDF.
+It runs as a single household deployment behind your reverse proxy with
+admin-managed accounts for the household; all data stays local except calls to
+the Kroger, search, and LLM providers.
 
 ## Architecture
 
@@ -88,7 +92,11 @@ running (the callback route the browser is redirected back to).
 
 **LLM.** `LLM_PROVIDER` (`anthropic` | `openai` | …) and `LLM_MODEL` select the
 model via LiteLLM; set the matching provider key (`ANTHROPIC_API_KEY` or
-`OPENAI_API_KEY`). All extraction/ranking calls run at temperature 0.
+`OPENAI_API_KEY`). All extraction/ranking calls run at temperature 0. Remy's
+workload (structured extraction/classification, plus vision for photo import)
+runs well on mini-class models — `openai/gpt-4o-mini` passes the full eval
+suite at ~6% of `gpt-4o`'s price. To vet any model:
+`LLM_MODEL=<model> pytest -m prompts` in `services/remy-api`.
 
 > Note: when `SEARCH_PROVIDER=llm` with OpenAI, the web-search step automatically
 > maps the model to its `*-search-preview` variant (e.g. `gpt-4o` →
@@ -132,16 +140,41 @@ There is no registration screen or invite-code flow — the first user is create
 from the CLI.
 
 ```bash
-# 1. Create the owner account (prompts for the password securely)
-docker compose exec remy-api python -m remy_api create-user --username owner
+# 1. Create the owner account as an admin (prompts for the password securely)
+docker compose exec remy-api python -m remy_api create-user --username owner --admin
 
 # 2. Log in at http://localhost:3000
 
 # 3. Connect Kroger: Settings → Connect Kroger (OAuth redirect round-trip)
 
-# 4. Pick your store: Settings → search by ZIP → select your Fred Meyer,
+# 4. Pick your store: Settings → search by ZIP → select your store,
 #    and set fulfillment to PICKUP (default) or DELIVERY.
 ```
+
+### Adding household members
+
+Admins manage accounts from **Settings → Users**: add a user (a temporary
+password is shown once — hand it over; they change it in **Settings → Account**
+on first login), reset passwords, and deactivate/reactivate accounts. Each user
+gets their own pantry, cookbook, plans, and Kroger connection. To grant or
+revoke admin on an existing account:
+
+```bash
+docker compose exec remy-api python -m remy_api set-admin --username <name> [--revoke]
+```
+
+### The cookbook
+
+Recipes you pick during planning are saved automatically. You can also add
+recipes directly from **Cookbook → Add recipe**:
+
+- **Paste a URL** — parsed with `recipe-scrapers`, falling back to LLM
+  extraction for pages without recipe markup.
+- **Photos or PDF** — photograph a cookbook page (multi-page supported, order
+  matters) or upload a PDF; a vision model transcribes it. Review the extracted
+  recipe against your photo before saving — the model is instructed to
+  transcribe only what it can read (never invent lines), and the preview is
+  your check.
 
 ### Importing an existing Mealie recipe collection
 
@@ -172,7 +205,7 @@ export ENCRYPTION_KEY=$(python -c "from cryptography.fernet import Fernet; print
 uvicorn remy_api.main:app --host 0.0.0.0 --port 8080 --reload
 
 ruff check src tests && ruff format --check src tests
-pytest                              # 146 tests; add -m prompts for the LLM eval fixtures
+pytest                              # offline suite; add -m prompts for the live LLM evals
 ```
 
 ### Frontend (`remy-web`)
@@ -261,9 +294,8 @@ strict host/origin checks.
   cart but cannot read it, remove from it, clear it, or check out (FR-18). Any
   cart view inside Remy is a local shadow record and is labeled as such;
   estimated totals are estimates.
-- **Checkout happens on kroger.com.** After Remy fills the cart it hands you a
-  link to <https://www.kroger.com/cart> to schedule pickup and pay. There is no
-  checkout automation.
-- **Single-household UX.** The data model is multi-user-ready, but v1 ships
-  single-user: no registration screen, no admin surface. Additional users are
-  created with the `create-user` CLI.
+- **Checkout happens on your store's site.** After Remy fills the cart it hands
+  you a link to your store banner's cart (e.g. fredmeyer.com/cart) to schedule
+  pickup and pay. There is no checkout automation.
+- **No self-registration.** Accounts are created by an admin (Settings → Users)
+  or the `create-user` CLI — deliberate for a household deployment.

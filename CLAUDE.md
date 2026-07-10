@@ -15,21 +15,24 @@ The specification and build history live in three root docs; the PRD
 
 ## Project overview
 
-Remy is a self-hosted, single-household (multi-user-ready) AI agent that turns
-a list of meals into a filled Kroger (Fred Meyer) pickup cart: discover recipes
-→ pick → consolidated shopping list → match to real Kroger products → add to the
-real cart, handing off to kroger.com for checkout. Selected recipes are saved to
-a local cookbook.
+Remy is a self-hosted, single-household AI agent (multi-user with an admin
+role) that turns a list of meals into a filled Kroger (Fred Meyer) pickup cart:
+discover recipes → pick → consolidated shopping list → match to real Kroger
+products → add to the real cart, handing off to the store banner's site
+(fredmeyer.com etc., `kroger/banners.py`) for checkout. Selected recipes are
+saved to a local cookbook, which also imports from URLs and from photos/PDFs
+(vision extraction).
 
 ## v2 architecture (PRD §4)
 
-Modular-monolith backend + a thin MCP facade. **Exactly two deployable
-services:**
+Modular-monolith backend + a thin MCP facade. **Two app services** plus a
+self-hosted search container:
 
 | Service  | Port | Purpose |
 |----------|------|---------|
 | remy-web | 3000 | React 18 + TypeScript + Vite + Tailwind (nginx in prod) |
 | remy-api | 8080 | FastAPI: auth, planner state machine, recipes, kroger, llm, websearch, and a mounted MCP facade |
+| searxng  | (internal) | Self-hosted metasearch (default `SEARCH_PROVIDER=searxng`); remy-net only, no host ports; config in `searxng/settings.yml` |
 
 Kroger and recipe functionality are **internal Python modules** of `remy-api`,
 not separate containers. No Mealie, no MCP sidecars, no LangGraph (the plan flow
@@ -102,7 +105,10 @@ npm run build                    # type-check + production build
 Copy `.env.template` → `.env`:
 `JWT_SECRET`, `ENCRYPTION_KEY` (Fernet), `KROGER_CLIENT_ID`/`SECRET`,
 `KROGER_REDIRECT_URI`, `LLM_PROVIDER`/`LLM_MODEL` + provider key,
-`SEARCH_PROVIDER`/`SEARCH_API_KEY`, `MCP_FACADE_ENABLED`.
+`SEARCH_PROVIDER` (`searxng` default — needs `SEARXNG_URL` + `SEARXNG_SECRET`;
+`brave` needs `SEARCH_API_KEY`; `llm` uses the LLM key), `MCP_FACADE_ENABLED`,
+`WEB_APP_URL` (empty in prod; web origin in split-origin dev).
+Mini-class models suffice: `openai/gpt-4o-mini` passes the full eval suite.
 
 Seed configs at the repo root: `pantry.yaml` (pantry-staple defaults, FR-11) and
 `recipe_sources.yaml` (favorite recipe sites, FR-24).
@@ -118,4 +124,9 @@ Seed configs at the repo root: `pantry.yaml` (pantry-staple defaults, FR-11) and
 - **Bounded async concurrency** for all fan-out work (semaphore ~5–8).
 - **Honest cart semantics:** the Kroger public API is add-only (no read, remove,
   or checkout). Any in-app cart is a local shadow record — label it as such.
+- **Prompt changes require eval runs**: prompts live in
+  `remy_api/prompts/` (versioned; bump `VERSION` on changes). Run the live
+  evals with an LLM key: `pytest -m prompts` (offline suite excludes them).
+  New prompt behaviors and every real-world bug fix get pinned as fixture
+  cases in `tests/prompts/` so they cannot regress.
 - Python 3.12+, ruff (line length 120), pytest. Backend package: `remy_api`.
