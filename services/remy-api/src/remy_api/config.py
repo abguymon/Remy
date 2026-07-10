@@ -77,9 +77,12 @@ class Settings(BaseSettings):
     llm_max_retries: int = 0  # transport retries; validation retry is separate
 
     # --- Web search ---
-    search_provider: str = "brave"  # brave | llm
+    search_provider: str = "brave"  # brave | llm | searxng
     search_api_key: str = ""
     search_timeout: float = 10.0
+    # Base URL of a self-hosted SearXNG instance (search_provider=searxng).
+    # In the compose stack this is the internal service: http://searxng:8080
+    searxng_url: str = ""
 
     # --- MCP facade ---
     mcp_facade_enabled: bool = True

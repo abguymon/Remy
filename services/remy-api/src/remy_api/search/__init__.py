@@ -11,6 +11,7 @@ from remy_api.search.base import (
 from remy_api.search.brave import BraveSearchProvider
 from remy_api.search.factory import get_search_provider
 from remy_api.search.llm_provider import LLMSearchProvider
+from remy_api.search.searxng import SearxngSearchProvider
 from remy_api.search.thumbnails import fetch_og_image, fetch_thumbnails
 
 __all__ = [
@@ -22,6 +23,7 @@ __all__ = [
     "SearchTimeoutError",
     "BraveSearchProvider",
     "LLMSearchProvider",
+    "SearxngSearchProvider",
     "get_search_provider",
     "fetch_og_image",
     "fetch_thumbnails",

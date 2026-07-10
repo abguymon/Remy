@@ -13,6 +13,7 @@ from remy_api.search import (
     SearchProvider,
     SearchProviderError,
     SearchResult,
+    SearxngSearchProvider,
     get_search_provider,
 )
 
@@ -119,3 +120,90 @@ def test_llm_provider_rejects_unsupported_model():
 def test_llm_provider_detects_supported():
     assert LLMSearchProvider(model="anthropic/claude-sonnet-4-5")._provider == "anthropic"
     assert LLMSearchProvider(model="openai/gpt-4o")._provider == "openai"
+
+
+# --- SearXNG ---
+
+_SEARXNG_PAYLOAD = {
+    "results": [
+        {"title": "Easy Tacos", "url": "https://x.com/tacos", "content": "yum"},
+        {"title": "Taco Night", "url": "https://y.com/night", "content": ""},
+        {"title": "no url here"},
+    ]
+}
+
+
+async def _run_searxng(monkeypatch, handler, **search_kwargs) -> list[SearchResult]:
+    transport = httpx.MockTransport(handler)
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        "remy_api.search.searxng.httpx.AsyncClient",
+        lambda *a, **k: real_client(*a, transport=transport, **k),
+    )
+    return await SearxngSearchProvider(base_url="http://searxng:8080", timeout=5).search("tacos", **search_kwargs)
+
+
+async def test_searxng_parses_results(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params.get("format") == "json"
+        assert request.url.params.get("safesearch") == "1"
+        assert request.url.path == "/search"
+        return httpx.Response(200, json=_SEARXNG_PAYLOAD)
+
+    results = await _run_searxng(monkeypatch, handler, max_results=10)
+    assert [r.url for r in results] == ["https://x.com/tacos", "https://y.com/night"]
+    assert results[0].snippet == "yum"
+
+
+async def test_searxng_site_restriction(monkeypatch):
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["q"] = request.url.params.get("q")
+        return httpx.Response(200, json={"results": []})
+
+    await _run_searxng(monkeypatch, handler, site="budgetbytes.com")
+    assert "site:budgetbytes.com" in seen["q"]
+
+
+async def test_searxng_max_results_truncation(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_SEARXNG_PAYLOAD)
+
+    results = await _run_searxng(monkeypatch, handler, max_results=1)
+    assert len(results) == 1
+    assert results[0].url == "https://x.com/tacos"
+
+
+async def test_searxng_403_is_provider_error(monkeypatch):
+    def handler(request):
+        return httpx.Response(403, text="forbidden")
+
+    with pytest.raises(SearchProviderError):
+        await _run_searxng(monkeypatch, handler)
+
+
+async def test_searxng_500_is_provider_error(monkeypatch):
+    def handler(request):
+        return httpx.Response(500, text="oops")
+
+    with pytest.raises(SearchProviderError):
+        await _run_searxng(monkeypatch, handler)
+
+
+def test_searxng_requires_url():
+    with pytest.raises(SearchConfigError):
+        SearxngSearchProvider(base_url="")
+
+
+def test_factory_searxng():
+    s = ProviderSettings(search_provider="searxng", searxng_url="http://searxng:8080")
+    provider = get_search_provider(s)
+    assert isinstance(provider, SearxngSearchProvider)
+    assert isinstance(provider, SearchProvider)  # runtime_checkable protocol
+
+
+def test_factory_searxng_missing_url():
+    s = ProviderSettings(search_provider="searxng", searxng_url="")
+    with pytest.raises(SearchConfigError):
+        get_search_provider(s)

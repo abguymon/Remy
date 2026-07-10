@@ -48,7 +48,8 @@ remy-web (React/nginx) ──/api/*──▶ remy-api (FastAPI)
 - Docker + Docker Compose
 - A [Kroger developer](https://developer.kroger.com/) application (client id/secret)
 - An LLM provider API key (Anthropic or OpenAI)
-- A web-search provider key (Brave by default), unless using the LLM-native search provider
+- A web-search backend: the bundled self-hosted **SearXNG** container (default, no
+  API key), or a Brave API key, or the LLM-native search provider
 
 ### 1. Create the Docker networks (first time only)
 
@@ -93,8 +94,28 @@ model via LiteLLM; set the matching provider key (`ANTHROPIC_API_KEY` or
 > maps the model to its `*-search-preview` variant (e.g. `gpt-4o` →
 > `gpt-4o-search-preview`), since the base models reject `web_search_options`.
 
-**Search.** `SEARCH_PROVIDER` is `brave` (default — set `SEARCH_API_KEY`) or
-`llm` (uses the configured LLM provider's native web search; no separate key).
+**Search.** `SEARCH_PROVIDER` is one of:
+
+- `searxng` (**default, recommended**) — a self-hosted [SearXNG](https://docs.searxng.org/)
+  metasearch container included in this stack. No API key: it aggregates public
+  search engines and exposes a JSON API. The compose stack runs it as the internal
+  `searxng` service (on `remy-net` only, no host ports, no reverse proxy) and
+  remy-api queries it at `SEARXNG_URL=http://searxng:8080`. It needs a secret key —
+  generate one and put it in `.env` as `SEARXNG_SECRET`:
+
+  ```bash
+  openssl rand -hex 32     # or: python -c "import secrets; print(secrets.token_hex(32))"
+  ```
+
+  The instance config lives at [`searxng/settings.yml`](searxng/settings.yml) and is
+  mounted at `/etc/searxng`. Two overrides matter: **`search.formats` must include
+  `json`** (otherwise the JSON API returns HTTP 403), and **`server.limiter: false`**
+  disables the bot/rate limiter so a non-browser client (remy-api) is not blocked —
+  safe because the instance is not publicly reachable. The secret is injected from
+  `$SEARXNG_SECRET` so nothing sensitive is committed to git.
+
+- `brave` — the [Brave Search API](https://brave.com/search/api/); set `SEARCH_API_KEY`.
+- `llm` — the configured LLM provider's native web search (Anthropic/OpenAI; no separate key).
 
 ### 3. Build and run
 

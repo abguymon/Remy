@@ -33,6 +33,24 @@ services:
       - ./recipe_sources.yaml:/app/seed/recipe_sources.yaml:ro
     networks:
       - remy-net
+    depends_on:
+      - searxng
+
+  # Self-hosted metasearch engine — the default SEARCH_PROVIDER=searxng backend.
+  # Internal only: no host ports, no reverse proxy, remy-net exclusively. Queried
+  # by remy-api at http://searxng:8080 (SEARXNG_URL). See searxng/settings.yml
+  # (JSON format enabled, bot limiter disabled for the internal API client).
+  searxng:
+    image: searxng/searxng:latest
+    container_name: searxng
+    restart: always
+    environment:
+      # Injected into settings.yml's secret_key. Generate once, keep in .env.
+      SEARXNG_SECRET: ${SEARXNG_SECRET:-}
+    volumes:
+      - ./searxng:/etc/searxng
+    networks:
+      - remy-net
 
   remy-web:
     build:

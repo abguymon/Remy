@@ -1,0 +1,26 @@
+# SearXNG settings for Remy's internal, private search instance.
+#
+# This instance is reachable only on the internal `remy-net` Docker network
+# (no host ports, no reverse proxy) and is queried only by remy-api via its
+# JSON API. It is single-household / non-public.
+#
+# `use_default_settings: true` inherits SearXNG's shipped defaults; the blocks
+# below are the only overrides.
+use_default_settings: true
+
+server:
+  # The secret is injected at runtime from the SEARXNG_SECRET env var (set in
+  # docker-compose from .env) so no secret is committed to git. SearXNG also
+  # natively honors $SEARXNG_SECRET, but we template it explicitly for clarity.
+  secret_key: "${SEARXNG_SECRET}"
+  # Disable the bot/rate limiter: our only client is remy-api (a non-browser
+  # HTTP client), which the limiter would otherwise block. Safe because the
+  # instance is not publicly reachable. Overridable via $SEARXNG_LIMITER.
+  limiter: false
+  image_proxy: false
+
+search:
+  # The JSON format MUST be enabled or the /search?format=json endpoint 403s.
+  formats:
+    - html
+    - json
