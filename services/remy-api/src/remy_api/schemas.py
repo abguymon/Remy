@@ -27,7 +27,40 @@ class UserProfile(BaseModel):
     id: str
     username: str
     is_active: bool
+    is_admin: bool
     created_at: datetime
+
+
+# --- admin: user management --------------------------------------------------
+
+
+class AdminUserInfo(BaseModel):
+    """A user row for the admin console. Never carries password data."""
+
+    id: str
+    username: str
+    is_admin: bool
+    is_active: bool
+    created_at: datetime
+    kroger_connected: bool
+
+
+class AdminUserCreate(BaseModel):
+    username: str = Field(min_length=1, max_length=255)
+
+
+class AdminUserCreated(BaseModel):
+    """Returned once on creation — includes the server-generated temp password."""
+
+    id: str
+    username: str
+    temp_password: str
+
+
+class TempPasswordResponse(BaseModel):
+    """A reset temp password, returned exactly once."""
+
+    temp_password: str
 
 
 class SettingsResponse(BaseModel):

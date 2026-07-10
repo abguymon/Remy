@@ -315,35 +315,56 @@ function CandidateCard({
   onPick: () => void
 }) {
   return (
-    <button
-      onClick={onPick}
-      disabled={disabled}
-      className="w-[210px] flex-none snap-start text-left disabled:cursor-default lg:w-auto"
-    >
-      <div
-        className={`relative h-[150px] overflow-hidden rounded-card border ${
-          selected ? 'border-terracotta ring-2 ring-terracotta' : 'border-line2'
-        }`}
+    <div className="w-[210px] flex-none snap-start lg:w-auto">
+      <button
+        onClick={onPick}
+        disabled={disabled}
+        className="block w-full text-left disabled:cursor-default"
       >
-        <PhotoFallback src={candidate.thumbnail} alt={candidate.title} />
-        {selected && (
-          <span className="absolute right-2 top-2 flex h-[26px] w-[26px] items-center justify-center rounded-full bg-terracotta text-[15px] font-bold text-white shadow">
-            ✓
+        <div
+          className={`relative h-[150px] overflow-hidden rounded-card border ${
+            selected ? 'border-terracotta ring-2 ring-terracotta' : 'border-line2'
+          }`}
+        >
+          <PhotoFallback src={candidate.thumbnail} alt={candidate.title} />
+          {selected && (
+            <span className="absolute right-2 top-2 flex h-[26px] w-[26px] items-center justify-center rounded-full bg-terracotta text-[15px] font-bold text-white shadow">
+              ✓
+            </span>
+          )}
+        </div>
+        <div className="mt-2.5 flex items-center gap-1.5">
+          <OriginBadge origin={candidate.origin} />
+          {candidate.total_time && (
+            <span className="text-[11px] text-fainter">{candidate.total_time}</span>
+          )}
+        </div>
+        <div className="mt-1.5 line-clamp-2 font-serif text-[15px] font-semibold leading-tight text-ink">
+          {candidate.title}
+        </div>
+      </button>
+      {/* Source affordance: a real link so keyboard/focus works. A sibling of the
+          select button (not nested) and stopPropagation-guarded so opening the
+          source never toggles selection (DESIGN_BRIEF §4.3). ≥44px tap target. */}
+      {candidate.url ? (
+        <a
+          href={candidate.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="mt-0.5 inline-flex min-h-[44px] max-w-full items-center gap-1 text-[11.5px] text-faint hover:text-terracotta focus-visible:text-terracotta"
+        >
+          <span className="truncate">{candidate.source_domain ?? 'View recipe'}</span>
+          <span aria-hidden className="flex-none">
+            ↗
           </span>
-        )}
-      </div>
-      <div className="mt-2.5 flex items-center gap-1.5">
-        <OriginBadge origin={candidate.origin} />
-        {candidate.total_time && (
-          <span className="text-[11px] text-fainter">{candidate.total_time}</span>
-        )}
-      </div>
-      <div className="mt-1.5 line-clamp-2 font-serif text-[15px] font-semibold leading-tight text-ink">
-        {candidate.title}
-      </div>
-      {candidate.source_domain && (
-        <div className="mt-0.5 text-[11.5px] text-faint">{candidate.source_domain}</div>
+          <span className="sr-only">(opens source in a new tab)</span>
+        </a>
+      ) : (
+        candidate.source_domain && (
+          <div className="mt-0.5 text-[11.5px] text-faint">{candidate.source_domain}</div>
+        )
       )}
-    </button>
+    </div>
   )
 }

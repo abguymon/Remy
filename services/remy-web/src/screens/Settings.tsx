@@ -5,19 +5,25 @@ import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ApiError } from '../lib/api'
 import {
+  useAdminUsers,
   useApiTokens,
   useChangePassword,
+  useCreateAdminUser,
   useCreateApiToken,
   useDisconnectKroger,
   useKrogerAuth,
   useKrogerStatus,
+  useMe,
+  useResetUserPassword,
   useRevokeApiToken,
   useSelectStore,
+  useSetUserActive,
   useSettings,
   useStoreSearch,
   useUpdateSettings,
 } from '../lib/queries'
 import type {
+  AdminUserInfo,
   ApiTokenCreated,
   FulfillmentMethod,
   SettingsResponse,
@@ -37,6 +43,7 @@ const KROGER_ERRORS: Record<string, string> = {
 
 export default function Settings() {
   const settings = useSettings()
+  const me = useMe()
   const [params, setParams] = useSearchParams()
 
   // Handle the OAuth return (?kroger=connected|error&reason=…): toast + clean URL.
@@ -75,6 +82,7 @@ export default function Settings() {
       <PantrySection settings={settings.data} />
       <SitesSection settings={settings.data} />
       <TokensSection />
+      {me.data?.is_admin && <UsersSection currentUserId={me.data.id} />}
       <AccountSection />
     </div>
   )
@@ -521,7 +529,19 @@ function TokensSection() {
         )}
       </div>
 
-      {created && <TokenModal token={created} onClose={() => setCreated(null)} />}
+      {created && (
+        <SecretModal
+          title="Token created"
+          blurb={
+            <>
+              Copy it now — <b>you won't be able to see it again.</b>
+            </>
+          }
+          secret={created.token}
+          copyLabel="token"
+          onClose={() => setCreated(null)}
+        />
+      )}
 
       <ConfirmDialog
         open={!!revokeId}
@@ -642,14 +662,225 @@ function AccountSection() {
   )
 }
 
-function TokenModal({ token, onClose }: { token: ApiTokenCreated; onClose: () => void }) {
+// --- Users (admin only) ----------------------------------------------------
+
+function Badge({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'danger' }) {
+  return (
+    <span
+      className={`flex-none rounded-md px-1.5 py-[2px] text-[10.5px] font-semibold ${
+        tone === 'danger' ? 'bg-danger-bg text-danger' : 'border border-line2 bg-cream text-muted'
+      }`}
+    >
+      {children}
+    </span>
+  )
+}
+
+type Reveal = { title: string; blurb: React.ReactNode; secret: string }
+
+function UsersSection({ currentUserId }: { currentUserId: string }) {
+  const users = useAdminUsers(true)
+  const create = useCreateAdminUser()
+  const reset = useResetUserPassword()
+  const setActive = useSetUserActive()
+  const [name, setName] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [reveal, setReveal] = useState<Reveal | null>(null)
+  const [confirm, setConfirm] = useState<{ user: AdminUserInfo; activate: boolean } | null>(null)
+
+  const rows = users.data ?? []
+
+  async function submitCreate() {
+    const username = name.trim()
+    if (!username) return
+    try {
+      const created = await create.mutateAsync(username)
+      setReveal({
+        title: 'User created',
+        blurb: (
+          <>
+            Temporary password for <b>{created.username}</b>. Share it securely — they should change
+            it after signing in, and <b>you won't see it again.</b>
+          </>
+        ),
+        secret: created.temp_password,
+      })
+      setAdding(false)
+      setName('')
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'Could not create user.')
+    }
+  }
+
+  async function resetPassword(u: AdminUserInfo) {
+    try {
+      const res = await reset.mutateAsync(u.id)
+      setReveal({
+        title: 'Password reset',
+        blurb: (
+          <>
+            New temporary password for <b>{u.username}</b> — <b>you won't see it again.</b>
+          </>
+        ),
+        secret: res.temp_password,
+      })
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'Could not reset password.')
+    }
+  }
+
+  const actionClass =
+    'rounded-[9px] border border-line2 bg-cream px-3 py-2.5 text-[12.5px] font-semibold'
+
+  return (
+    <Section label="Users">
+      <div className="overflow-hidden rounded-card border border-line bg-surface">
+        {rows.map((u) => {
+          const isSelf = u.id === currentUserId
+          return (
+            <div key={u.id} className="border-b border-divider px-3.5 py-3 last:border-0">
+              <div className="flex items-center gap-2.5">
+                <span
+                  className={`h-2 w-2 flex-none rounded-full ${
+                    u.kroger_connected ? 'bg-success-dot' : 'bg-line2'
+                  }`}
+                  title={u.kroger_connected ? 'Kroger connected' : 'Kroger not connected'}
+                />
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                  <span className="truncate text-[14px] font-semibold text-ink">{u.username}</span>
+                  {u.is_admin && <Badge>Admin</Badge>}
+                  {isSelf && <Badge>You</Badge>}
+                  {!u.is_active && <Badge tone="danger">Inactive</Badge>}
+                </div>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  onClick={() => resetPassword(u)}
+                  className={`${actionClass} text-muted hover:text-ink`}
+                >
+                  Reset password
+                </button>
+                {u.is_active ? (
+                  <button
+                    disabled={isSelf}
+                    onClick={() => setConfirm({ user: u, activate: false })}
+                    className={`${actionClass} text-danger disabled:opacity-40`}
+                    title={isSelf ? "You can't deactivate your own account" : undefined}
+                  >
+                    Deactivate
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setConfirm({ user: u, activate: true })}
+                    className={`${actionClass} text-terracotta`}
+                  >
+                    Activate
+                  </button>
+                )}
+              </div>
+            </div>
+          )
+        })}
+
+        {rows.length === 0 && !adding && (
+          <div className="px-3.5 py-3 text-[13px] text-muted">
+            {users.isLoading ? 'Loading…' : 'No users yet.'}
+          </div>
+        )}
+
+        {adding ? (
+          <div className="flex items-center gap-2 px-3.5 py-3">
+            <input
+              autoFocus
+              placeholder="Username"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && submitCreate()}
+              className="flex-1 rounded-[9px] border border-line2 bg-cream px-3 py-2 text-[13.5px] outline-none focus:border-terracotta"
+            />
+            <Button className="px-3.5 py-2 text-[13px]" onClick={submitCreate} disabled={create.isPending}>
+              {create.isPending ? '…' : 'Create'}
+            </Button>
+            <Button
+              variant="ghost"
+              className="px-2 py-2 text-[13px]"
+              onClick={() => {
+                setAdding(false)
+                setName('')
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setAdding(true)}
+            className="w-full px-3.5 py-3 text-left text-[13.5px] font-semibold text-terracotta"
+          >
+            ＋ Add user
+          </button>
+        )}
+      </div>
+
+      {reveal && (
+        <SecretModal
+          title={reveal.title}
+          blurb={reveal.blurb}
+          secret={reveal.secret}
+          copyLabel="password"
+          onClose={() => setReveal(null)}
+        />
+      )}
+
+      <ConfirmDialog
+        open={!!confirm}
+        title={confirm?.activate ? 'Activate this user?' : 'Deactivate this user?'}
+        body={
+          confirm?.activate
+            ? 'They will be able to sign in again.'
+            : "They'll be signed out and can't sign in until reactivated. Their recipes and data are kept."
+        }
+        confirmLabel={confirm?.activate ? 'Activate' : 'Deactivate'}
+        destructive={!confirm?.activate}
+        onCancel={() => setConfirm(null)}
+        onConfirm={async () => {
+          if (confirm) {
+            try {
+              await setActive.mutateAsync({ id: confirm.user.id, active: confirm.activate })
+              toast(confirm.activate ? 'User activated' : 'User deactivated')
+            } catch (err) {
+              toast(err instanceof ApiError ? err.message : 'Action failed.')
+            }
+          }
+          setConfirm(null)
+        }}
+      />
+    </Section>
+  )
+}
+
+// Show-once reveal modal, shared by API tokens and admin temp passwords: the
+// secret is displayed exactly once with a copy affordance and can't be re-fetched.
+function SecretModal({
+  title,
+  blurb,
+  secret,
+  copyLabel = 'secret',
+  onClose,
+}: {
+  title: string
+  blurb: React.ReactNode
+  secret: string
+  copyLabel?: string
+  onClose: () => void
+}) {
   const [copied, setCopied] = useState(false)
 
   async function copy() {
     try {
-      await navigator.clipboard.writeText(token.token)
+      await navigator.clipboard.writeText(secret)
       setCopied(true)
-      toast('Token copied')
+      toast(`${copyLabel[0].toUpperCase()}${copyLabel.slice(1)} copied`)
     } catch {
       setCopied(false)
       toast('Copy failed — select and copy manually.')
@@ -666,12 +897,10 @@ function TokenModal({ token, onClose }: { token: ApiTokenCreated; onClose: () =>
         className="w-full max-w-[360px] rounded-[18px] bg-surface p-[22px] shadow-modal"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="font-serif text-xl font-semibold">Token created</div>
-        <div className="mt-1.5 text-[13px] leading-relaxed text-muted">
-          Copy it now — <b>you won't be able to see it again.</b>
-        </div>
+        <div className="font-serif text-xl font-semibold">{title}</div>
+        <div className="mt-1.5 text-[13px] leading-relaxed text-muted">{blurb}</div>
         <div className="my-3.5 break-all rounded-[10px] bg-dark px-3.5 py-3 font-mono text-[12.5px] text-[#E4B8A6]">
-          {token.token}
+          {secret}
         </div>
         <div className="flex gap-2.5">
           <Button variant="secondary" className="flex-1 py-3 text-sm" onClick={copy}>

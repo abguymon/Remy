@@ -332,3 +332,31 @@ export interface ApiTokenCreated extends ApiTokenInfo {
 export interface KrogerAuthResponse {
   auth_url: string
 }
+
+// --- current user + admin (user management) ---
+export interface UserProfile {
+  id: string
+  username: string
+  is_active: boolean
+  is_admin: boolean
+  created_at: string
+}
+
+export interface AdminUserInfo {
+  id: string
+  username: string
+  is_admin: boolean
+  is_active: boolean
+  created_at: string
+  kroger_connected: boolean
+}
+
+export interface AdminUserCreated {
+  id: string
+  username: string
+  temp_password: string
+}
+
+export interface TempPasswordResponse {
+  temp_password: string
+}

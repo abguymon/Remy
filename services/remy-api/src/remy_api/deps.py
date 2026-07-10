@@ -93,3 +93,13 @@ async def get_current_user(
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+
+async def require_admin(user: CurrentUser) -> User:
+    """Gate a route on the caller being an administrator (403 otherwise)."""
+    if not user.is_admin:
+        raise PermissionError_("Administrator access required.", code="admin_required")
+    return user
+
+
+AdminUser = Annotated[User, Depends(require_admin)]

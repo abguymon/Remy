@@ -48,6 +48,13 @@ class ConflictError(APIError):
     code = "conflict"
 
 
+class UnprocessableError(APIError):
+    """A well-formed request that violates a business rule (422)."""
+
+    status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+    code = "unprocessable"
+
+
 def _payload(code: str, message: str) -> dict[str, dict[str, str]]:
     return {"error": {"code": code, "message": message}}
 

@@ -93,7 +93,10 @@ def _apply_additive_migrations(conn) -> None:  # noqa: ANN001
     inspector = inspect(conn)
     tables = set(inspector.get_table_names())
     # (table, column, DDL type) additive migrations.
-    additions = [("user_settings", "store_chain", "VARCHAR(64)")]
+    additions = [
+        ("user_settings", "store_chain", "VARCHAR(64)"),
+        ("users", "is_admin", "BOOLEAN NOT NULL DEFAULT 0"),
+    ]
     for table, column, ddl_type in additions:
         if table not in tables:
             continue  # create_all just made it with the column present

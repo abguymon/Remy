@@ -5,6 +5,8 @@
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './api'
 import type {
+  AdminUserCreated,
+  AdminUserInfo,
   ApiTokenCreated,
   ApiTokenInfo,
   CartEdit,
@@ -21,7 +23,9 @@ import type {
   SettingsResponse,
   SettingsUpdate,
   StoreLocation,
+  TempPasswordResponse,
   TokenResponse,
+  UserProfile,
 } from './types'
 
 export const queryClient = new QueryClient({
@@ -57,6 +61,13 @@ export function useSettings() {
   return useQuery({
     queryKey: ['settings'],
     queryFn: () => api.get<SettingsResponse>('/users/me/settings'),
+  })
+}
+
+export function useMe() {
+  return useQuery({
+    queryKey: ['me'],
+    queryFn: () => api.get<UserProfile>('/users/me'),
   })
 }
 
@@ -255,5 +266,40 @@ export function useRevokeApiToken() {
   return useMutation({
     mutationFn: (id: string) => api.del<void>(`/users/me/api-tokens/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['api-tokens'] }),
+  })
+}
+
+// --- admin: user management (admin-only) -----------------------------------
+
+const adminUsersKey = ['admin', 'users'] as const
+
+export function useAdminUsers(enabled: boolean) {
+  return useQuery({
+    queryKey: adminUsersKey,
+    queryFn: () => api.get<AdminUserInfo[]>('/admin/users'),
+    enabled,
+  })
+}
+
+export function useCreateAdminUser() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (username: string) => api.post<AdminUserCreated>('/admin/users', { username }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminUsersKey }),
+  })
+}
+
+export function useResetUserPassword() {
+  return useMutation({
+    mutationFn: (id: string) => api.post<TempPasswordResponse>(`/admin/users/${id}/reset-password`),
+  })
+}
+
+export function useSetUserActive() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      api.post<AdminUserInfo>(`/admin/users/${id}/${active ? 'activate' : 'deactivate'}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminUsersKey }),
   })
 }

@@ -2,10 +2,15 @@
 
 Commands
 --------
-``create-user --username X [--password Y]``
+``create-user --username X [--password Y] [--admin]``
     Bootstrap a user + default settings. Prompts for the password (twice) if
-    ``--password`` is omitted. This is the first-user bootstrap — there is no
-    registration endpoint and no invite codes (PRD §6).
+    ``--password`` is omitted. ``--admin`` grants the administrator role. This is
+    the first-user bootstrap — there is no registration endpoint and no invite
+    codes (PRD §6).
+
+``set-admin --username X [--revoke]``
+    Grant (or, with ``--revoke``, remove) the administrator role on an existing
+    user.
 
 ``import-mealie --username X --url URL --api-key KEY [--dry-run]``
     One-shot import of a Mealie instance's recipes (+ images) into the store for
@@ -41,13 +46,28 @@ def _prompt_password() -> str:
     return first
 
 
-async def _create_user(username: str, password: str) -> None:
+async def _create_user(username: str, password: str, is_admin: bool) -> None:
     await init_db()
     try:
         factory = get_session_factory()
         async with factory() as session:
-            user = await create_user(session, username, password)
-        print(f"Created user '{user.username}' (id={user.id}) with default settings.")
+            user = await create_user(session, username, password, is_admin=is_admin)
+        suffix = " (admin)" if user.is_admin else ""
+        print(f"Created user '{user.username}' (id={user.id}){suffix} with default settings.")
+    finally:
+        await dispose_engine()
+
+
+async def _set_admin(username: str, revoke: bool) -> None:
+    await init_db()
+    try:
+        factory = get_session_factory()
+        async with factory() as session:
+            user = await _resolve_user(session, username)
+            user.is_admin = not revoke
+            await session.commit()
+        verb = "revoked from" if revoke else "granted to"
+        print(f"Admin role {verb} '{username}'.")
     finally:
         await dispose_engine()
 
@@ -81,6 +101,11 @@ def main(argv: list[str] | None = None) -> int:
     create = sub.add_parser("create-user", help="Create a user and seed default settings.")
     create.add_argument("--username", required=True)
     create.add_argument("--password", help="Password (omit to be prompted securely).")
+    create.add_argument("--admin", action="store_true", help="Grant the administrator role.")
+
+    set_admin = sub.add_parser("set-admin", help="Grant or revoke admin on an existing user.")
+    set_admin.add_argument("--username", required=True)
+    set_admin.add_argument("--revoke", action="store_true", help="Remove admin instead of granting it.")
 
     mealie = sub.add_parser("import-mealie", help="Import recipes from a Mealie instance.")
     mealie.add_argument("--username", required=True, help="Owning user for the imported recipes.")
@@ -93,7 +118,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "create-user":
         password = args.password or _prompt_password()
         try:
-            asyncio.run(_create_user(args.username, password))
+            asyncio.run(_create_user(args.username, password, args.admin))
+        except APIError as exc:
+            print(f"Error: {exc.message}", file=sys.stderr)
+            return 1
+        return 0
+
+    if args.command == "set-admin":
+        try:
+            asyncio.run(_set_admin(args.username, args.revoke))
         except APIError as exc:
             print(f"Error: {exc.message}", file=sys.stderr)
             return 1
