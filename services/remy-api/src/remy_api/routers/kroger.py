@@ -29,6 +29,7 @@ from remy_api.errors import NotFoundError
 from remy_api.kroger import (
     KrogerError,
     StoreLocation,
+    banner_cart_url,
     generate_pkce,
     generate_state,
     get_client,
@@ -62,7 +63,9 @@ class StatusResponse(BaseModel):
 class StoreSelectResponse(BaseModel):
     store_location_id: str
     store_name: str | None
+    store_chain: str | None
     zip_code: str | None
+    cart_url: str
 
 
 @router.get("/auth", response_model=AuthUrlResponse)
@@ -146,7 +149,14 @@ async def kroger_select_store(location_id: str, user: CurrentUser, session: Sess
         session.add(settings)
     settings.store_location_id = store.id
     settings.store_name = store.name
+    settings.store_chain = store.chain
     if store.zip_code:
         settings.zip_code = store.zip_code
     await session.commit()
-    return StoreSelectResponse(store_location_id=store.id, store_name=store.name, zip_code=settings.zip_code)
+    return StoreSelectResponse(
+        store_location_id=store.id,
+        store_name=store.name,
+        store_chain=store.chain,
+        zip_code=settings.zip_code,
+        cart_url=banner_cart_url(store.chain or store.name),
+    )

@@ -78,6 +78,30 @@ async def get_session() -> AsyncIterator[AsyncSession]:
         yield session
 
 
+def _apply_additive_migrations(conn) -> None:  # noqa: ANN001
+    """Add columns introduced after a table already exists in a deployed DB.
+
+    ``create_all`` never alters an existing table, so a column added to a model
+    after prod first booted would be missing on the live SQLite file. Applied
+    idempotently (guarded by a table-info probe) — no Alembic in v1. Postgres
+    users would run a real migration; this is the SQLite-file self-heal path.
+    """
+    if conn.dialect.name != "sqlite":
+        return
+    from sqlalchemy import inspect
+
+    inspector = inspect(conn)
+    tables = set(inspector.get_table_names())
+    # (table, column, DDL type) additive migrations.
+    additions = [("user_settings", "store_chain", "VARCHAR(64)")]
+    for table, column, ddl_type in additions:
+        if table not in tables:
+            continue  # create_all just made it with the column present
+        existing = {c["name"] for c in inspector.get_columns(table)}
+        if column not in existing:
+            conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}")
+
+
 async def init_db() -> None:
     """Create all tables. Called from the app lifespan (no Alembic in v1)."""
     # Import models so they register on Base.metadata before create_all.
@@ -86,6 +110,7 @@ async def init_db() -> None:
     engine = get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_apply_additive_migrations)
 
 
 async def dispose_engine() -> None:

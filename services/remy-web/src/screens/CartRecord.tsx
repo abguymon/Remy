@@ -2,13 +2,13 @@
 // honesty banner + order history with per-item outcomes and estimated totals.
 // The real cart lives on kroger.com (FR-18).
 import { useState } from 'react'
-import { money, shortDate } from '../lib/format'
-import { useOrders } from '../lib/queries'
+import { cartHost, money, shortDate } from '../lib/format'
+import { useOrders, useSettings } from '../lib/queries'
 import type { OrderItem, OrderRecord } from '../lib/types'
 import { EmptyState, StatusPill } from '../components/ui'
 import type { PillTone } from '../components/ui'
 
-const KROGER_CART_URL = 'https://www.kroger.com/cart'
+const DEFAULT_CART_URL = 'https://www.kroger.com/cart'
 
 function outcome(status: string): { tone: PillTone; label: string; added: boolean } {
   switch (status) {
@@ -43,6 +43,11 @@ function summarize(items: OrderItem[]): string {
 
 export default function CartRecord() {
   const orders = useOrders()
+  const settings = useSettings()
+  // Banner-aware handoff: the API resolves the user's store to its banner cart
+  // (e.g. fredmeyer.com); fall back to kroger.com before settings load.
+  const cartUrl = settings.data?.cart_url ?? DEFAULT_CART_URL
+  const cartLabel = cartHost(cartUrl)
 
   return (
     <div className="px-5 pb-8 pt-3.5">
@@ -51,12 +56,12 @@ export default function CartRecord() {
       <div className="my-3.5 rounded-[12px] border border-line2 bg-badge-favbg px-3.5 py-3 text-[12.5px] leading-snug text-muted">
         <b className="text-ink">Remy's record.</b> Your real cart lives on{' '}
         <a
-          href={KROGER_CART_URL}
+          href={cartUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="font-semibold text-terracotta"
         >
-          kroger.com
+          {cartLabel}
         </a>{' '}
         — this is a log of what we added, not a live cart.
       </div>
@@ -76,7 +81,7 @@ export default function CartRecord() {
           </div>
           <div className="flex flex-col gap-2.5">
             {orders.data!.map((o, i) => (
-              <OrderCard key={o.id} order={o} defaultOpen={i === 0} />
+              <OrderCard key={o.id} order={o} defaultOpen={i === 0} cartUrl={cartUrl} cartLabel={cartLabel} />
             ))}
           </div>
         </>
@@ -85,7 +90,17 @@ export default function CartRecord() {
   )
 }
 
-function OrderCard({ order, defaultOpen }: { order: OrderRecord; defaultOpen: boolean }) {
+function OrderCard({
+  order,
+  defaultOpen,
+  cartUrl,
+  cartLabel,
+}: {
+  order: OrderRecord
+  defaultOpen: boolean
+  cartUrl: string
+  cartLabel: string
+}) {
   const [open, setOpen] = useState(defaultOpen)
   const items = order.items ?? []
 
@@ -105,13 +120,13 @@ function OrderCard({ order, defaultOpen }: { order: OrderRecord; defaultOpen: bo
           <span className="font-semibold text-terracotta">{open ? 'Hide items' : 'View items'}</span>
           <span className="text-line2">·</span>
           <a
-            href={KROGER_CART_URL}
+            href={cartUrl}
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
             className="font-semibold text-terracotta"
           >
-            Open kroger.com/cart
+            Open {cartLabel}/cart
           </a>
         </div>
       </button>

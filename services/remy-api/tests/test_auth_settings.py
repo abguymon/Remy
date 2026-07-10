@@ -99,6 +99,59 @@ async def test_settings_update_round_trip(bootstrapped):
     assert again.json()["zip_code"] == "98101"
 
 
+async def test_password_change_happy_path(bootstrapped):
+    client = bootstrapped
+    token = await _login(client)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    new_password = "brand-new-pw-123"
+    resp = await client.post(
+        "/users/me/password",
+        json={"current_password": PASSWORD, "new_password": new_password},
+        headers=headers,
+    )
+    assert resp.status_code == 204
+
+    # Old password no longer works at login; new one does.
+    old = await client.post("/auth/login", json={"username": USERNAME, "password": PASSWORD})
+    assert old.status_code == 401
+    fresh = await client.post("/auth/login", json={"username": USERNAME, "password": new_password})
+    assert fresh.status_code == 200
+
+
+async def test_password_change_wrong_current_rejected(bootstrapped):
+    client = bootstrapped
+    token = await _login(client)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = await client.post(
+        "/users/me/password",
+        json={"current_password": "not-the-password", "new_password": "another-valid-pw"},
+        headers=headers,
+    )
+    # 403 (not 401) so the web client's global logout-on-401 is not triggered.
+    assert resp.status_code == 403
+    assert resp.json()["error"]["code"] == "invalid_current_password"
+
+    # Original password still valid — nothing was changed.
+    still = await client.post("/auth/login", json={"username": USERNAME, "password": PASSWORD})
+    assert still.status_code == 200
+
+
+async def test_password_change_too_short_is_422(bootstrapped):
+    client = bootstrapped
+    token = await _login(client)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = await client.post(
+        "/users/me/password",
+        json={"current_password": PASSWORD, "new_password": "short"},
+        headers=headers,
+    )
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "validation_error"
+
+
 async def test_api_token_lifecycle(bootstrapped):
     client = bootstrapped
     jwt_token = await _login(client)

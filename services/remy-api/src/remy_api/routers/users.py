@@ -8,17 +8,18 @@ from fastapi import APIRouter, status
 from sqlalchemy import select
 
 from remy_api.deps import CurrentUser, SessionDep
-from remy_api.errors import NotFoundError
+from remy_api.errors import NotFoundError, PermissionError_
 from remy_api.models import ApiToken, UserSettings
 from remy_api.schemas import (
     ApiTokenCreate,
     ApiTokenCreated,
     ApiTokenInfo,
+    PasswordChange,
     SettingsResponse,
     SettingsUpdate,
     UserProfile,
 )
-from remy_api.security import generate_api_token
+from remy_api.security import generate_api_token, hash_password, verify_password
 from remy_api.seed import default_favorite_sites, default_pantry_items
 
 router = APIRouter(prefix="/users/me", tags=["users"])
@@ -59,6 +60,20 @@ async def update_settings(payload: SettingsUpdate, user: CurrentUser, session: S
     await session.commit()
     await session.refresh(settings)
     return SettingsResponse.model_validate(settings)
+
+
+@router.post("/password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_password(payload: PasswordChange, user: CurrentUser, session: SessionDep) -> None:
+    """Verify the current password, then hash + store the new one.
+
+    Wrong current password is a 403 (not 401): the caller is authenticated, they
+    just failed the re-auth challenge. A 401 here would trip the web client's
+    global logout-on-401 and bounce the user to the login screen.
+    """
+    if not verify_password(payload.current_password, user.password_hash):
+        raise PermissionError_("Current password is incorrect.", code="invalid_current_password")
+    user.password_hash = hash_password(payload.new_password)
+    await session.commit()
 
 
 # --- API tokens (FR-26) ------------------------------------------------------

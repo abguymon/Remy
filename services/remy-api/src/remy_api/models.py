@@ -90,6 +90,10 @@ class UserSettings(Base):
     favorite_sites: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     store_location_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     store_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Kroger banner chain code (e.g. "FRED", "QFC") — drives the banner-aware cart
+    # handoff URL. Persisted on store select; nullable for stores chosen before
+    # this column existed (the cart URL then falls back to the store name).
+    store_chain: Mapped[str | None] = mapped_column(String(64), nullable=True)
     zip_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
     fulfillment_method: Mapped[FulfillmentMethod] = mapped_column(
         Enum(FulfillmentMethod, native_enum=False, length=16),

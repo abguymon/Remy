@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
+from remy_api.kroger import banner_cart_url
 from remy_api.models import FulfillmentMethod
 
 
@@ -36,8 +37,15 @@ class SettingsResponse(BaseModel):
     favorite_sites: list[str]
     store_location_id: str | None
     store_name: str | None
+    store_chain: str | None
     zip_code: str | None
     fulfillment_method: FulfillmentMethod
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def cart_url(self) -> str:
+        """Banner-aware Kroger cart handoff URL for this user's selected store."""
+        return banner_cart_url(self.store_chain or self.store_name)
 
 
 class SettingsUpdate(BaseModel):
@@ -47,8 +55,17 @@ class SettingsUpdate(BaseModel):
     favorite_sites: list[str] | None = None
     store_location_id: str | None = None
     store_name: str | None = None
+    store_chain: str | None = None
     zip_code: str | None = None
     fulfillment_method: FulfillmentMethod | None = None
+
+
+class PasswordChange(BaseModel):
+    """Change the current user's password (verify current, set new)."""
+
+    current_password: str = Field(min_length=1)
+    # Minimal sanity floor — a too-short new password is a 422 before any hashing.
+    new_password: str = Field(min_length=8, max_length=1024)
 
 
 class ApiTokenCreate(BaseModel):

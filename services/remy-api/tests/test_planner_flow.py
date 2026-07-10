@@ -428,11 +428,15 @@ async def test_full_golden_path(env):
 
     # --- execute (truthful outcomes incl. a failure) ---
     await _connect_kroger(user_id)
+    # A Fred Meyer store → the handoff CTA must point at the banner cart, not
+    # the generic kroger.com/cart.
+    await client.put("/users/me/settings", json={"store_chain": "FRED"}, headers=headers)
     done = await client.post("/plan/cart/execute", headers=headers)
     assert done.status_code == 200, done.text
     result = done.json()
     assert result["status"] == "done"
     execution = result["execution"]
+    assert execution["kroger_cart_url"] == "https://www.fredmeyer.com/cart"
     assert execution["status"] == "partial"  # one item failed, others added
     exec_by_upc = {i["upc"]: i for i in execution["items"]}
     assert exec_by_upc[bb_alt]["status"] == "failed"  # bb2 failed truthfully

@@ -22,6 +22,18 @@ export function cookedLabel(iso: string | null | undefined): string {
   return iso ? `Cooked ${shortDate(iso)}` : 'New'
 }
 
+// Display label for a Kroger cart handoff URL — the bare host without "www.",
+// e.g. "https://www.fredmeyer.com/cart" → "fredmeyer.com". The API owns the
+// URL→banner mapping; this only formats it for copy like "lives on fredmeyer.com".
+export function cartHost(url: string | null | undefined): string {
+  if (!url) return 'kroger.com'
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return 'kroger.com'
+  }
+}
+
 // Kroger stock levels → the four review pills. Anything unknown reads as
 // "stock unknown" rather than pretending it's in stock (honesty, FR-16).
 export function stockLabel(level: string | null | undefined): string {

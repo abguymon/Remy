@@ -519,13 +519,18 @@ async def test_store_select_round_trip(client, user_id):
     body = resp.json()
     assert body["store_location_id"] == "70100460"
     assert body["store_name"] == "Fred Meyer - Burlington"
+    assert body["store_chain"] == "FRED"
     assert body["zip_code"] == "98233"
+    # Banner-aware cart URL derived from the chain code.
+    assert body["cart_url"] == "https://www.fredmeyer.com/cart"
 
-    # Persisted to user settings.
+    # Persisted to user settings (chain + derived cart URL surfaced there too).
     resp = await client.get("/users/me/settings", headers=headers)
     settings = resp.json()
     assert settings["store_location_id"] == "70100460"
     assert settings["store_name"] == "Fred Meyer - Burlington"
+    assert settings["store_chain"] == "FRED"
+    assert settings["cart_url"] == "https://www.fredmeyer.com/cart"
 
 
 async def test_store_select_unknown_store_404(client, user_id):

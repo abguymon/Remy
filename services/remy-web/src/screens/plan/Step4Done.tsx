@@ -4,7 +4,7 @@
 // plan so the user can start a fresh one.
 import { useMemo } from 'react'
 import type { ExecItem, PlanSnapshot } from '../../lib/types'
-import { money } from '../../lib/format'
+import { cartHost, money } from '../../lib/format'
 import { Button, EmptyState, SectionLabel } from '../../components/ui'
 import { sourceFor } from './Step3Cart'
 
@@ -53,6 +53,8 @@ export default function Step4Done({
   const totalFailed = exec.status === 'failed'
   const addedCount = groups.added.length + groups.substituted.length
   const lineTotal = (i: ExecItem) => money((i.price ?? 0) * i.quantity)
+  // Banner-aware handoff label, e.g. "fredmeyer.com" (API owns the URL mapping).
+  const cartLabel = cartHost(exec.kroger_cart_url)
 
   return (
     <div className="px-[22px] pb-9 pt-3.5">
@@ -79,7 +81,7 @@ export default function Step4Done({
 
       {/* Honesty copy (FR-18) */}
       <div className="my-4 rounded-[12px] border border-warn-border bg-warn-bg px-3.5 py-3 text-[13px] leading-relaxed text-warn-deep">
-        Items are in your Kroger cart. Review, schedule pickup, and pay on kroger.com —{' '}
+        Items are in your Kroger cart. Review, schedule pickup, and pay on {cartLabel} —{' '}
         <b>Remy can't see or change your cart from here.</b>
       </div>
 
@@ -94,7 +96,7 @@ export default function Step4Done({
           rel="noopener noreferrer"
           className="block rounded-[12px] bg-terracotta py-4 text-center text-base font-bold text-white shadow-terracotta hover:bg-terracotta-dark"
         >
-          Finish checkout on kroger.com →
+          Finish checkout on {cartLabel} →
         </a>
       )}
 

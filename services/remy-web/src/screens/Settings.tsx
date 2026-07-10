@@ -6,6 +6,7 @@ import { useSearchParams } from 'react-router-dom'
 import { ApiError } from '../lib/api'
 import {
   useApiTokens,
+  useChangePassword,
   useCreateApiToken,
   useDisconnectKroger,
   useKrogerAuth,
@@ -74,6 +75,7 @@ export default function Settings() {
       <PantrySection settings={settings.data} />
       <SitesSection settings={settings.data} />
       <TokensSection />
+      <AccountSection />
     </div>
   )
 }
@@ -548,6 +550,96 @@ function TokensSection() {
       toast(err instanceof ApiError ? err.message : 'Could not create token.')
     }
   }
+}
+
+// --- Account (password change) ---------------------------------------------
+
+function AccountSection() {
+  const changePassword = useChangePassword()
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const tooShort = next.length > 0 && next.length < 8
+  const mismatch = confirm.length > 0 && next !== confirm
+  const canSubmit =
+    current.length > 0 && next.length >= 8 && confirm.length > 0 && next === confirm
+
+  async function submit() {
+    setError(null)
+    if (next !== confirm) {
+      setError('New passwords do not match.')
+      return
+    }
+    if (next.length < 8) {
+      setError('New password must be at least 8 characters.')
+      return
+    }
+    try {
+      await changePassword.mutateAsync({ current_password: current, new_password: next })
+      setCurrent('')
+      setNext('')
+      setConfirm('')
+      toast('Password updated')
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not update password.')
+    }
+  }
+
+  const inputClass =
+    'w-full rounded-[10px] border border-line2 bg-cream px-3 py-3 text-sm outline-none focus:border-terracotta'
+
+  return (
+    <Section label="Account">
+      <div className="rounded-card border border-line bg-surface p-4">
+        <div className="text-[15px] font-semibold">Change password</div>
+        <div className="mt-3 flex flex-col gap-2.5">
+          <input
+            type="password"
+            autoComplete="current-password"
+            placeholder="Current password"
+            value={current}
+            onChange={(e) => setCurrent(e.target.value)}
+            className={inputClass}
+          />
+          <input
+            type="password"
+            autoComplete="new-password"
+            placeholder="New password (min 8 characters)"
+            value={next}
+            onChange={(e) => setNext(e.target.value)}
+            className={inputClass}
+          />
+          <input
+            type="password"
+            autoComplete="new-password"
+            placeholder="Confirm new password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && canSubmit && submit()}
+            className={inputClass}
+          />
+        </div>
+
+        {tooShort && (
+          <div className="mt-2 text-[12.5px] text-muted">
+            New password must be at least 8 characters.
+          </div>
+        )}
+        {mismatch && <div className="mt-2 text-[12.5px] text-danger">Passwords don't match.</div>}
+        {error && <div className="mt-2 text-[12.5px] text-danger">{error}</div>}
+
+        <Button
+          className="mt-3.5 w-full py-3"
+          onClick={submit}
+          disabled={!canSubmit || changePassword.isPending}
+        >
+          {changePassword.isPending ? 'Updating…' : 'Update password'}
+        </Button>
+      </div>
+    </Section>
+  )
 }
 
 function TokenModal({ token, onClose }: { token: ApiTokenCreated; onClose: () => void }) {

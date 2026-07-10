@@ -222,8 +222,11 @@ export interface SettingsResponse {
   favorite_sites: string[]
   store_location_id: string | null
   store_name: string | null
+  store_chain: string | null
   zip_code: string | null
   fulfillment_method: FulfillmentMethod
+  // Banner-aware Kroger cart handoff URL for the selected store (kroger.com if none).
+  cart_url: string
 }
 
 export interface SettingsUpdate {
@@ -231,8 +234,14 @@ export interface SettingsUpdate {
   favorite_sites?: string[]
   store_location_id?: string | null
   store_name?: string | null
+  store_chain?: string | null
   zip_code?: string | null
   fulfillment_method?: FulfillmentMethod
+}
+
+export interface PasswordChange {
+  current_password: string
+  new_password: string
 }
 
 // --- recipes (T8: cookbook + detail) ---

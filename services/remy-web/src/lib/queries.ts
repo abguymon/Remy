@@ -13,6 +13,7 @@ import type {
   ListEdit,
   MealChoice,
   OrderRecord,
+  PasswordChange,
   PlanSnapshot,
   RecipeDetail,
   RecipeSummary,
@@ -190,6 +191,12 @@ export function useUpdateSettings() {
   return useMutation({
     mutationFn: (body: SettingsUpdate) => api.put<SettingsResponse>('/users/me/settings', body),
     onSuccess: (settings) => qc.setQueryData(['settings'], settings),
+  })
+}
+
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: (body: PasswordChange) => api.post<void>('/users/me/password', body),
   })
 }
 

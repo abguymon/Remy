@@ -13,6 +13,7 @@ Public surface for the planner / router / MCP facade:
 real cart cannot be read, cleared, or checked out via the API (FR-18).
 """
 
+from .banners import DEFAULT_CART_URL, banner_cart_url
 from .client import KrogerClient, generate_pkce, generate_state
 from .errors import (
     KrogerAPIError,
@@ -44,6 +45,7 @@ from .service import (
 )
 
 __all__ = [
+    "DEFAULT_CART_URL",
     "CartItemOutcome",
     "CartItemRequest",
     "KrogerAPIError",
@@ -60,6 +62,7 @@ __all__ = [
     "StockLevel",
     "StoreLocation",
     "add_items_to_cart",
+    "banner_cart_url",
     "close_client",
     "generate_pkce",
     "generate_state",

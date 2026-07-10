@@ -16,6 +16,7 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from remy_api.kroger.banners import banner_cart_url
 from remy_api.kroger.errors import KrogerNotConnectedError
 from remy_api.kroger.models import OutcomeStatus
 from remy_api.models import KrogerToken, Order, Plan, PlanStatus, UserSettings
@@ -108,6 +109,9 @@ async def execute_plan(session: AsyncSession, plan: Plan) -> None:
         items=exec_items,
         estimated_total=cart.estimated_total,
         order_id=order.id,
+        # Hand the user off to their store's banner cart (Fred Meyer, QFC, …),
+        # preferring the persisted chain code, then the store name, then generic.
+        kroger_cart_url=banner_cart_url((settings.store_chain or settings.store_name) if settings else None),
         warnings=cart.warnings,
     ).model_dump(mode="json")
     plan.status = PlanStatus.DONE
