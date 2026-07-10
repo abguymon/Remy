@@ -7,17 +7,24 @@ import { clearToken, getToken } from '../stores/auth'
 export class ApiError extends Error {
   code: string
   status: number
-  constructor(status: number, code: string, message: string) {
+  // Machine-readable failure reasons for errors that carry them (recipe parse,
+  // upload rejection); callers can render them as a checklist.
+  reasons: string[]
+  constructor(status: number, code: string, message: string, reasons: string[] = []) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
+    this.reasons = reasons
   }
 }
 
 interface RequestOptions {
   method?: string
   body?: unknown
+  // FormData bodies are sent as multipart (the browser sets the boundary
+  // Content-Type); JSON stringification is skipped for these.
+  formData?: FormData
   // Some endpoints (GET /plan/state when no plan) legitimately 404 — callers can
   // opt out of the error throw for specific statuses and get null instead.
   allow404?: boolean
@@ -27,12 +34,13 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const headers: Record<string, string> = {}
   const token = getToken()
   if (token) headers['Authorization'] = `Bearer ${token}`
-  if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
+  const isMultipart = opts.formData !== undefined
+  if (opts.body !== undefined && !isMultipart) headers['Content-Type'] = 'application/json'
 
   const res = await fetch(`/api${path}`, {
     method: opts.method ?? 'GET',
     headers,
-    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+    body: isMultipart ? opts.formData : opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   })
 
   if (res.status === 401) {
@@ -59,10 +67,12 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   }
 
   if (!res.ok) {
-    const envelope = payload as { error?: { code?: string; message?: string } } | null
+    const envelope = payload as {
+      error?: { code?: string; message?: string; reasons?: string[] }
+    } | null
     const code = envelope?.error?.code ?? 'error'
     const message = envelope?.error?.message ?? `Request failed (${res.status})`
-    throw new ApiError(res.status, code, message)
+    throw new ApiError(res.status, code, message, envelope?.error?.reasons ?? [])
   }
 
   return payload as T
@@ -73,6 +83,7 @@ export const api = {
   post: <T>(path: string, body?: unknown) => request<T>(path, { method: 'POST', body }),
   put: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body }),
   del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  upload: <T>(path: string, formData: FormData) => request<T>(path, { method: 'POST', formData }),
 }
 
 // Recipe images are served from an authenticated endpoint, so an <img> tag

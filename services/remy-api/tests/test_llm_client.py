@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 import remy_api.llm.client as client_mod
 from remy_api.llm import (
+    ImagePart,
     LLMAPIError,
     LLMClient,
     LLMEmptyResponseError,
@@ -87,3 +88,43 @@ async def test_never_returns_none(monkeypatch):
     _stub_acompletion(monkeypatch, ['{"name": "y", "count": 2}'])
     out = await LLMClient().structured(_prompt(), _Schema)
     assert out is not None
+
+
+async def test_text_only_prompt_sends_plain_string_content(monkeypatch):
+    captured: dict = {}
+
+    async def fake(**kwargs):
+        captured.update(kwargs)
+        return _fake_response('{"name": "a", "count": 1}')
+
+    monkeypatch.setattr(client_mod.litellm, "acompletion", fake)
+    monkeypatch.setattr(client_mod.litellm, "supports_response_schema", lambda **k: False)
+    await LLMClient().structured(_prompt(), _Schema)
+    user_msg = captured["messages"][1]
+    assert user_msg["content"] == "usr"  # unchanged: text-only path stays a string
+
+
+async def test_multimodal_prompt_builds_content_parts(monkeypatch):
+    captured: dict = {}
+
+    async def fake(**kwargs):
+        captured.update(kwargs)
+        return _fake_response('{"name": "a", "count": 1}')
+
+    monkeypatch.setattr(client_mod.litellm, "acompletion", fake)
+    monkeypatch.setattr(client_mod.litellm, "supports_response_schema", lambda **k: False)
+    prompt = RenderedPrompt(
+        prompt_id="vision",
+        version=1,
+        system="sys",
+        user="look",
+        images=(ImagePart(media_type="image/jpeg", data="Zm9v"), ImagePart(media_type="image/png", data="YmFy")),
+    )
+    await LLMClient().structured(prompt, _Schema)
+    parts = captured["messages"][1]["content"]
+    assert isinstance(parts, list)
+    assert parts[0] == {"type": "text", "text": "look"}
+    image_parts = [p for p in parts if p["type"] == "image_url"]
+    assert len(image_parts) == 2
+    assert image_parts[0]["image_url"]["url"] == "data:image/jpeg;base64,Zm9v"
+    assert image_parts[1]["image_url"]["url"] == "data:image/png;base64,YmFy"

@@ -112,6 +112,82 @@ async def test_from_url_parse_failure_surfaces_422(auth, monkeypatch):
     assert resp.json()["error"]["code"] == "recipe_parse_failed"
 
 
+def _png_bytes(color=(10, 120, 200)) -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGB", (400, 300), color).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+class _FakeLLM:
+    """Stand-in for the LLM client: returns a canned extraction, no network."""
+
+    def __init__(self, result):
+        self._result = result
+
+    async def structured(self, prompt, schema):
+        return self._result
+
+
+async def test_from_upload_photo_happy_path(auth, monkeypatch):
+    client, headers = auth
+    from remy_api.recipes.schemas import LLMRecipeExtraction
+
+    canned = LLMRecipeExtraction(
+        found=True,
+        title="Grandma's Lemon Bars",
+        recipe_yield="16 bars",
+        ingredients=["2 cups flour", "1 cup butter", "4 eggs"],
+        instructions=["Press crust.", "Bake."],
+    )
+    monkeypatch.setattr("remy_api.routers.recipes.get_llm_client", lambda: _FakeLLM(canned))
+
+    resp = await client.post(
+        "/recipes/from-upload",
+        files=[("files", ("page.png", _png_bytes(), "image/png"))],
+        data={"hint": "the lemon bars"},
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["title"] == "Grandma's Lemon Bars"
+    assert len(body["ingredients"]) == 3
+    assert body["source_url"] is None  # uploads have no source URL
+    assert body["image_url"] == f"/recipes/{body['id']}/image"  # first photo stored as cover
+
+    img = await client.get(f"/recipes/{body['id']}/image", headers=headers)
+    assert img.status_code == 200 and img.headers["content-type"] == "image/jpeg"
+
+
+async def test_from_upload_not_a_recipe_surfaces_422(auth, monkeypatch):
+    client, headers = auth
+    from remy_api.recipes.schemas import LLMRecipeExtraction
+
+    monkeypatch.setattr(
+        "remy_api.routers.recipes.get_llm_client",
+        lambda: _FakeLLM(LLMRecipeExtraction(found=False)),
+    )
+    resp = await client.post(
+        "/recipes/from-upload",
+        files=[("files", ("blurry.png", _png_bytes(), "image/png"))],
+        headers=headers,
+    )
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "recipe_parse_failed"
+    assert "llm_no_recipe" in resp.json()["error"]["reasons"]
+
+
+async def test_from_upload_rejects_unsupported_type(auth):
+    client, headers = auth
+    resp = await client.post(
+        "/recipes/from-upload",
+        files=[("files", ("notes.txt", b"hello", "text/plain"))],
+        headers=headers,
+    )
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "upload_rejected"
+    assert "unsupported_type" in resp.json()["error"]["reasons"]
+
+
 async def test_image_served_and_missing_is_404(auth, monkeypatch):
     client, headers = auth
     png = io.BytesIO()

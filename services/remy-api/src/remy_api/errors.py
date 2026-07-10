@@ -58,7 +58,13 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(APIError)
     async def _handle_api_error(_request: Request, exc: APIError) -> JSONResponse:
         headers = {"WWW-Authenticate": "Bearer"} if exc.status_code == status.HTTP_401_UNAUTHORIZED else None
-        return JSONResponse(status_code=exc.status_code, content=_payload(exc.code, exc.message), headers=headers)
+        payload = _payload(exc.code, exc.message)
+        # Some errors (recipe-parse, upload-rejected) carry machine-readable
+        # ``reasons`` explaining *why* they failed; surface them (PRD §9.1).
+        reasons = getattr(exc, "reasons", None)
+        if reasons:
+            payload["error"]["reasons"] = list(reasons)
+        return JSONResponse(status_code=exc.status_code, content=payload, headers=headers)
 
     @app.exception_handler(StarletteHTTPException)
     async def _handle_http_error(_request: Request, exc: StarletteHTTPException) -> JSONResponse:

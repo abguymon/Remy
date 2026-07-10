@@ -76,9 +76,20 @@ async def llm_extract_recipe(
         {"page_text": page_text, "source_url": source_url},
         LLMRecipeExtraction,
     )
+    return recipe_from_extraction(result, source_url=source_url)
+
+
+def recipe_from_extraction(result: LLMRecipeExtraction, *, source_url: str | None) -> ParsedRecipe:
+    """Convert a validated :class:`LLMRecipeExtraction` into a :class:`ParsedRecipe`.
+
+    Shared by the URL text-fallback and the photo/PDF upload paths so both apply
+    the same honesty gate: ``found=false``/no title, or an incomplete result,
+    raises :class:`RecipeParseError` (with specific ``reasons``) instead of
+    persisting a hollow recipe (PRD §9.1).
+    """
     if not result.found or not result.title:
         raise RecipeParseError(
-            "The page does not appear to contain a single recipe.",
+            "This does not appear to contain a single readable recipe.",
             reasons=["llm_no_recipe"],
         )
     parsed = ParsedRecipe(
@@ -94,7 +105,7 @@ async def llm_extract_recipe(
     )
     if not parsed.is_complete():
         raise RecipeParseError(
-            "LLM extraction did not yield a complete recipe.",
+            "The extraction did not yield a complete recipe.",
             reasons=[f"missing_{m}" for m in parsed.missing()],
         )
     return parsed
