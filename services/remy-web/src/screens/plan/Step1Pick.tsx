@@ -8,6 +8,7 @@ import { useRetry, useSubmitSelection } from '../../lib/queries'
 import type { Candidate, MealChoice, PlanSnapshot } from '../../lib/types'
 import { toast } from '../../stores/toast'
 import {
+  AuthedImage,
   Button,
   CandidateSkeleton,
   DegradedBanner,
@@ -326,7 +327,15 @@ function CandidateCard({
             selected ? 'border-terracotta ring-2 ring-terracotta' : 'border-line2'
           }`}
         >
-          <PhotoFallback src={candidate.thumbnail} alt={candidate.title} />
+          {/* Saved-recipe thumbnails point at the Bearer-protected
+              /recipes/{id}/image endpoint — a plain <img> would 401. Load those
+              via AuthedImage (token fetch → blob URL). Web candidates carry
+              external og:image URLs and load fine with a plain <img>. */}
+          {candidate.thumbnail?.startsWith('/recipes/') ? (
+            <AuthedImage path={candidate.thumbnail} alt={candidate.title} />
+          ) : (
+            <PhotoFallback src={candidate.thumbnail} alt={candidate.title} />
+          )}
           {selected && (
             <span className="absolute right-2 top-2 flex h-[26px] w-[26px] items-center justify-center rounded-full bg-terracotta text-[15px] font-bold text-white shadow">
               ✓

@@ -19,6 +19,7 @@ import httpx
 from bs4 import BeautifulSoup
 from recipe_scrapers import scrape_html
 
+from remy_api.net import BLOCKED_STATUSES, impersonated_get
 from remy_api.recipes.llm_fallback import RecipeParseError, StructuredLLM, llm_extract_recipe
 from remy_api.recipes.schemas import ParsedIngredient, ParsedRecipe
 
@@ -42,6 +43,11 @@ async def fetch_page(url: str, *, client: httpx.AsyncClient | None = None) -> st
     client = client or httpx.AsyncClient(timeout=_FETCH_TIMEOUT, follow_redirects=True, headers=headers)
     try:
         resp = await client.get(url, headers=headers)
+        # Bot walls (e.g. seriouseats) 403 plain httpx despite the browser UA —
+        # they fingerprint the TLS handshake. Retry once via curl_cffi
+        # impersonation before giving up (PRD §9.1: no silent failure).
+        if resp.status_code in BLOCKED_STATUSES:
+            return await _fetch_page_impersonated(url, headers)
         resp.raise_for_status()
         content = resp.content[: _MAX_PAGE_BYTES + 1]
         if len(content) > _MAX_PAGE_BYTES:
@@ -63,6 +69,31 @@ async def fetch_page(url: str, *, client: httpx.AsyncClient | None = None) -> st
     finally:
         if owns_client:
             await client.aclose()
+
+
+async def _fetch_page_impersonated(url: str, headers: dict[str, str]) -> str:
+    """curl_cffi fallback for the page fetch, preserving :func:`fetch_page`
+    semantics (timeout, size cap, typed :class:`RecipeParseError`)."""
+    try:
+        status, content, _ = await impersonated_get(
+            url, headers=headers, timeout=_FETCH_TIMEOUT, max_bytes=_MAX_PAGE_BYTES
+        )
+    except Exception as exc:  # noqa: BLE001 - any curl_cffi transport failure
+        raise RecipeParseError(
+            "Could not fetch the recipe page.",
+            reasons=["fetch_failed"],
+        ) from exc
+    if status >= 400:
+        raise RecipeParseError(
+            f"Recipe page returned HTTP {status}.",
+            reasons=[f"http_{status}"],
+        )
+    if len(content) > _MAX_PAGE_BYTES:
+        raise RecipeParseError(
+            "Recipe page is too large to parse safely.",
+            reasons=["page_too_large"],
+        )
+    return content.decode("utf-8", errors="replace")
 
 
 def _fmt_time(minutes: int | float | None) -> str | None:

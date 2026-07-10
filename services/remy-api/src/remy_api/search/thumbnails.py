@@ -14,6 +14,8 @@ import logging
 import httpx
 from selectolax.parser import HTMLParser
 
+from remy_api.net import BLOCKED_STATUSES, impersonated_get
+
 logger = logging.getLogger(__name__)
 
 _MAX_BYTES = 200_000
@@ -60,6 +62,11 @@ async def fetch_og_image(
     client = client or httpx.AsyncClient(follow_redirects=True, timeout=timeout, headers=_HEADERS)
     try:
         async with client.stream("GET", url, headers=_HEADERS) as response:
+            # Bot-walled hosts 403 plain httpx despite the browser UA (TLS
+            # fingerprinting). Retry via curl_cffi impersonation; still cosmetic,
+            # so any failure there falls through to None.
+            if response.status_code in BLOCKED_STATUSES:
+                return await _fetch_og_image_impersonated(url, timeout)
             if response.status_code != 200:
                 return None
             ctype = response.headers.get("content-type", "")
@@ -79,6 +86,23 @@ async def fetch_og_image(
     finally:
         if owns_client:
             await client.aclose()
+
+
+async def _fetch_og_image_impersonated(url: str, timeout: float) -> str | None:
+    """curl_cffi fallback for og:image, keeping the 200KB cap and never raising."""
+    try:
+        status, content, ctype = await impersonated_get(
+            url, headers=_HEADERS, timeout=timeout, max_bytes=_MAX_BYTES
+        )
+    except Exception as exc:  # noqa: BLE001 - cosmetic; log at debug and move on
+        logger.debug("og:image impersonated fetch failed for %s: %s", url, exc)
+        return None
+    if status != 200:
+        return None
+    if ctype and "html" not in ctype.lower():
+        return None
+    html = content.decode("utf-8", errors="ignore")
+    return _extract_image(html)
 
 
 async def fetch_thumbnails(urls: list[str], concurrency: int = _CONCURRENCY) -> dict[str, str | None]:

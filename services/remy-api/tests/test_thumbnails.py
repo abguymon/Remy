@@ -90,3 +90,48 @@ async def test_fetch_thumbnails_batch_dedups_and_maps(monkeypatch):
     out = await thumbnails.fetch_thumbnails(urls)
     assert set(out.keys()) == {"https://a.test/1", "https://b.test/2"}
     assert all(v == "https://cdn.example.com/pic.jpg" for v in out.values())
+
+
+async def test_fetch_og_image_403_falls_back_to_curl_cffi(monkeypatch):
+    """A 403 og:image fetch escalates to curl_cffi impersonation."""
+    called = {}
+
+    async def fake_impersonated_get(url, *, headers, timeout, max_bytes=None):
+        called["url"] = url
+        return 200, _HTML_OG.encode(), "text/html"
+
+    monkeypatch.setattr("remy_api.search.thumbnails.impersonated_get", fake_impersonated_get)
+
+    def handler(request):
+        return httpx.Response(403, text="blocked")
+
+    assert await _fetch(monkeypatch, handler) == "https://cdn.example.com/pic.jpg"
+    assert called["url"] == "https://site.test/recipe"
+
+
+async def test_fetch_og_image_200_skips_curl_cffi(monkeypatch):
+    """A normal 200 never invokes the heavy curl_cffi fallback."""
+
+    async def boom(*args, **kwargs):
+        raise AssertionError("curl_cffi fallback must not run on a 200 response")
+
+    monkeypatch.setattr("remy_api.search.thumbnails.impersonated_get", boom)
+
+    def handler(request):
+        return httpx.Response(200, text=_HTML_OG, headers={"content-type": "text/html"})
+
+    assert await _fetch(monkeypatch, handler) == "https://cdn.example.com/pic.jpg"
+
+
+async def test_fetch_og_image_curl_failure_returns_none(monkeypatch):
+    """If curl_cffi also fails, the cosmetic fetch still returns None (never raises)."""
+
+    async def fake_impersonated_get(url, *, headers, timeout, max_bytes=None):
+        raise RuntimeError("curl blew up")
+
+    monkeypatch.setattr("remy_api.search.thumbnails.impersonated_get", fake_impersonated_get)
+
+    def handler(request):
+        return httpx.Response(403, text="blocked")
+
+    assert await _fetch(monkeypatch, handler) is None

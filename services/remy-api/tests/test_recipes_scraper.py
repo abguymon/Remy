@@ -110,3 +110,59 @@ def test_extract_page_text_strips_scripts():
     assert "Hello" in text
     assert "bad()" not in text
     assert "x{}" not in text
+
+
+async def test_fetch_page_403_falls_back_to_curl_cffi(monkeypatch):
+    """A bot-wall 403 from httpx must escalate to the curl_cffi impersonation
+    fallback rather than becoming a typed error."""
+    called = {}
+
+    async def fake_impersonated_get(url, *, headers, timeout, max_bytes=None):
+        called["url"] = url
+        return 200, b"<html><body>impersonated ok</body></html>", "text/html"
+
+    monkeypatch.setattr("remy_api.recipes.scraper.impersonated_get", fake_impersonated_get)
+
+    def handler(request):
+        return httpx.Response(403, text="blocked")
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        html = await fetch_page("https://www.seriouseats.com/blocked", client=client)
+    assert "impersonated ok" in html
+    assert called["url"] == "https://www.seriouseats.com/blocked"
+
+
+async def test_fetch_page_200_skips_curl_cffi(monkeypatch):
+    """The common 200 path must never touch the heavy curl_cffi fallback."""
+
+    async def boom(*args, **kwargs):
+        raise AssertionError("curl_cffi fallback must not run on a 200 response")
+
+    monkeypatch.setattr("remy_api.recipes.scraper.impersonated_get", boom)
+
+    def handler(request):
+        return httpx.Response(200, text="<html><body>direct ok</body></html>")
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        html = await fetch_page("https://example.com/ok", client=client)
+    assert "direct ok" in html
+
+
+async def test_fetch_page_impersonation_403_is_typed(monkeypatch):
+    """If curl_cffi is also blocked, surface a typed http_403 (no silent fail)."""
+
+    async def fake_impersonated_get(url, *, headers, timeout, max_bytes=None):
+        return 403, b"still blocked", "text/html"
+
+    monkeypatch.setattr("remy_api.recipes.scraper.impersonated_get", fake_impersonated_get)
+
+    def handler(request):
+        return httpx.Response(403, text="blocked")
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        with pytest.raises(RecipeParseError) as excinfo:
+            await fetch_page("https://www.seriouseats.com/blocked", client=client)
+    assert "http_403" in excinfo.value.reasons
