@@ -19,7 +19,7 @@ from remy_api.prompts.rules import PRODUCT_RULES
 
 PROMPT_ID = "product_extraction"
 PROMPT_ID_SINGLE = "product_extraction_single"
-VERSION = 2
+VERSION = 3
 
 
 class ParsedLine(BaseModel):

@@ -48,3 +48,12 @@ def test_confirmed_stock_preferred_over_earlier_unknown():
     sel = select_product(ranked, fulfillment="pickup")
     assert sel.status == MatchStatus.SUBSTITUTED
     assert sel.chosen.upc == "b"
+
+
+def test_empty_ranked_is_not_found():
+    """When P5 returns none_acceptable, _rank yields [] and the walk must produce
+    not_found (no chosen product) so the review UI offers a manual search."""
+    sel = select_product([], fulfillment="pickup")
+    assert sel.status == MatchStatus.NOT_FOUND
+    assert sel.chosen is None
+    assert sel.alternatives == []

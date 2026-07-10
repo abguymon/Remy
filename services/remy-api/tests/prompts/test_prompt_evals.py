@@ -194,6 +194,37 @@ async def test_p4_explicit_mixture_keeps_all_options(llm_client):
     assert "cilantro" in terms and "parsley" in terms and "mint" in terms
 
 
+async def test_p4_cut_style_produce_is_fresh_not_canned(llm_client):
+    """Cut styles on produce (julienne/shredded/sliced/diced...) are PREP, not a
+    product form. A fresh produce line must never become a canned/jarred search
+    term (real bug: "1 cup julienne carrots" -> canned sliced carrots)."""
+    out = await llm_client.structured(
+        product_extraction.render_batch(
+            product_extraction.ProductExtractionInput(
+                lines=[
+                    product_extraction.ParsedLine(quantity=1, unit="cup", food="carrot", note="julienne"),
+                    product_extraction.ParsedLine(quantity=2, unit="cup", food="cabbage", note="shredded"),
+                ]
+            )
+        ),
+        product_extraction.ProductExtractionOutput,
+    )
+    by_index = {it.index: it for it in out.items}
+
+    carrots = by_index[0].products
+    assert len(carrots) == 1, f"expected one carrot product, got {[p.search_term for p in carrots]}"
+    carrot_term = carrots[0].search_term.lower()
+    assert "carrot" in carrot_term
+    assert "fresh carrots" in carrot_term or "matchstick" in carrot_term, carrot_term
+    assert "sliced" not in carrot_term and "canned" not in carrot_term, carrot_term
+
+    cabbage = by_index[1].products
+    assert len(cabbage) == 1, f"expected one cabbage product, got {[p.search_term for p in cabbage]}"
+    cabbage_term = cabbage[0].search_term.lower()
+    assert "cabbage" in cabbage_term or "coleslaw" in cabbage_term, cabbage_term
+    assert "canned" not in cabbage_term and "jarred" not in cabbage_term, cabbage_term
+
+
 # --- P5 product ranking -------------------------------------------------------
 
 
@@ -219,6 +250,35 @@ async def test_p5_none_acceptable_escape_hatch(llm_client):
     )
     out = await llm_client.structured(product_ranking.render(inp), product_ranking.ProductRankingOutput)
     assert out.none_acceptable is True
+
+
+async def test_p5_all_canned_produce_is_none_acceptable(llm_client):
+    """Fresh-produce term with only canned candidates -> none_acceptable, never
+    the least-bad can (mirrors the real bug: fresh carrots vs. all canned)."""
+    case = load_fixture("kroger_products.json")["cases"][5]  # fresh carrots -> all canned
+    inp = product_ranking.ProductRankingInput(
+        search_term=case["search_term"],
+        package_quantity=case["package_quantity"],
+        products=[product_ranking.RankableProduct(**p) for p in case["products"]],
+    )
+    out = await llm_client.structured(product_ranking.render(inp), product_ranking.ProductRankingOutput)
+    assert out.none_acceptable is True, [r.model_dump() for r in out.ranked]
+
+
+async def test_p5_picks_fresh_produce_over_cans(llm_client):
+    """Same all-canned set plus one fresh option -> pick the fresh one, not a can."""
+    case = load_fixture("kroger_products.json")["cases"][6]  # fresh carrots + one fresh bunch
+    inp = product_ranking.ProductRankingInput(
+        search_term=case["search_term"],
+        package_quantity=case["package_quantity"],
+        products=[product_ranking.RankableProduct(**p) for p in case["products"]],
+    )
+    out = await llm_client.structured(product_ranking.render(inp), product_ranking.ProductRankingOutput)
+    assert out.none_acceptable is False
+    assert out.ranked, "expected the fresh bunch to be ranked"
+    top = case["products"][out.ranked[0].index]["description"]
+    assert "Whole Bunch" in top, top
+    assert "Sliced" not in top and "Cups" not in top, top
 
 
 # --- recipe_from_images (multimodal vision) -----------------------------------

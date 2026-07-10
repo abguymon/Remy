@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from remy_api.prompts.base import RenderedPrompt, indexed, json_block
 
 PROMPT_ID = "product_ranking"
-VERSION = 1
+VERSION = 2
 
 
 class RankableProduct(BaseModel):
@@ -60,7 +60,16 @@ Ranking rules:
   contains it. Disambiguate by intent: "green onions" = fresh scallions, NOT
   noodles/dips; "fresh mint" = the herb, NOT gum/candy/tea.
 - For produce, prefer fresh/raw over processed/frozen/canned (unless the term
-  says canned/frozen).
+  says canned/frozen). When the search term is FRESH produce (e.g. "fresh
+  carrots", "fresh cabbage") and NONE of the candidates are actually fresh/raw —
+  every option is canned, jarred, frozen, dried, or a prepared/processed food —
+  do NOT settle for the least-bad can. Return {"ranked": [], "none_acceptable":
+  true} so the shopper is prompted to search manually.
+    - e.g. term "fresh carrots" with candidates ["Kroger Sliced Carrots (can)",
+      "Del Monte Carrots (can)", "Carrot Cake Mix"] -> none_acceptable=true
+      (a fresh carrot line must not be satisfied by canned carrots).
+    - but if even ONE candidate is fresh (e.g. "Carrots Whole Bunch", produce
+      dept), rank that fresh one first and do NOT set none_acceptable.
 - Avoid multipacks/value packs: prefer a SINGLE unit over a 4-pack/6-pack unless
   package_quantity >= 4. Avoid "BIG DEAL", "Value Pack", "Family Size" unless the
   needed quantity justifies it. Use price for unit-price sanity (a $1.19 single

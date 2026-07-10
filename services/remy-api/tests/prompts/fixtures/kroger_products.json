@@ -51,6 +51,28 @@
         {"description": "Yellow Food Coloring", "size": "1 oz", "price": 3.99, "department": "Baking"}
       ],
       "expect": {"none_acceptable": true}
+    },
+    {
+      "search_term": "fresh carrots",
+      "package_quantity": 1,
+      "products": [
+        {"description": "Kroger Sliced Carrots", "size": "14.5 oz", "price": 0.89, "department": "Canned & Packaged"},
+        {"description": "Del Monte Hot Honey Sliced Carrots", "size": "14.5 oz", "price": 1.79, "department": "Canned & Packaged"},
+        {"description": "Kroger No Salt Added Sliced Carrots", "size": "14.5 oz", "price": 0.99, "department": "Canned & Packaged"},
+        {"description": "Del Monte Carrot Cups", "size": "4 x 4 oz", "price": 2.49, "department": "Canned & Packaged"}
+      ],
+      "expect": {"none_acceptable": true}
+    },
+    {
+      "search_term": "fresh carrots",
+      "package_quantity": 1,
+      "products": [
+        {"description": "Carrots Whole Bunch", "size": "1 bunch", "price": 1.49, "department": "Produce"},
+        {"description": "Kroger Sliced Carrots", "size": "14.5 oz", "price": 0.89, "department": "Canned & Packaged"},
+        {"description": "Del Monte Hot Honey Sliced Carrots", "size": "14.5 oz", "price": 1.79, "department": "Canned & Packaged"},
+        {"description": "Del Monte Carrot Cups", "size": "4 x 4 oz", "price": 2.49, "department": "Canned & Packaged"}
+      ],
+      "expect": {"prefer_description_contains": "Carrots Whole Bunch", "avoid_description_contains": "Sliced", "none_acceptable": false}
     }
   ]
 }

@@ -32,6 +32,23 @@ the number of PACKAGES to buy (not the recipe amount).
    packaged/processed/seasoning product: "fresh cilantro", "fresh green onions",
    "fresh basil", "fresh ginger", "fresh mint", "fresh parsley". (Onions/garlic
    are produce too, but use plain "yellow onion"/"garlic" — those search cleanly.)
+   - CUT STYLES ON PRODUCE ARE PREP INSTRUCTIONS, NOT PRODUCT FORMS. A cut/prep
+     word attached to a fresh vegetable (julienne, matchstick, shredded, diced,
+     sliced, chopped, minced, grated, ribboned, cubed) describes what the cook
+     does to it — it is NOT a kind of product to buy. Drop the cut word and search
+     the fresh whole vegetable, applying the fresh-prefix as above:
+       - "julienne carrots" -> "fresh carrots" ("matchstick carrots" — a real
+         fresh SKU — is equally acceptable).
+       - "shredded cabbage" -> "fresh cabbage" ("coleslaw mix" is acceptable too).
+       - "diced onion" -> "yellow onion"; "sliced mushrooms" -> "fresh mushrooms".
+     NEVER emit "sliced <vegetable>" / "diced <vegetable>" / "chopped <vegetable>"
+     as a search term for a fresh produce line: at grocery search those words
+     match CANNED/JARRED goods (e.g. "sliced carrots" returns canned sliced
+     carrots), which is the wrong department for fresh produce.
+   - This covers produce/herbs only and does NOT override rule 3 (beans stay
+     canned by default). If the recipe LINE ITSELF says canned/frozen/jarred (or a
+     packaged pre-cut product), keep that form — the cut-style rule applies only
+     to otherwise-fresh produce.
 
 3. Beans/legumes default to CANNED unless the line says dry/dried/soaked:
    - "black beans" / "1 cup black beans" -> "canned black beans" (qty 1)
