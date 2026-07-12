@@ -15,6 +15,7 @@ from remy_api.prompts import (
     meal_extraction,
     product_extraction,
     product_ranking,
+    receipt_items,
     recipe_from_images,
     saved_recipe_relevance,
 )
@@ -130,6 +131,36 @@ def test_recipe_from_images_render_caps_image_count():
 def test_recipe_from_images_input_requires_at_least_one_image():
     with pytest.raises(ValidationError):
         recipe_from_images.RecipeFromImagesInput(images=[])
+
+
+# --- receipt_items (multimodal + text) render ---------------------------------
+
+
+def test_receipt_items_render_text_mode():
+    p = receipt_items.render(receipt_items.ReceiptItemsInput(text="MILK 3.49\nTOTAL 3.49"))
+    assert isinstance(p, RenderedPrompt)
+    assert p.prompt_id == "receipt_items" and p.version >= 1
+    assert p.temperature == 0.0
+    assert p.images == ()
+    assert "MILK 3.49" in p.user
+    # anti-hallucination + skip-totals rules present
+    assert "found_items=false" in p.system
+    assert "SUBTOTAL" in p.system and "TOTAL" in p.system and "TAX" in p.system
+
+
+def test_receipt_items_render_image_mode_caps():
+    imgs = [_img(str(i)) for i in range(9)]
+    p = receipt_items.render(receipt_items.ReceiptItemsInput(images=imgs))
+    assert len(p.images) == 6  # capped at _MAX_IMAGES
+    assert "6 image(s)" in p.user
+
+
+def test_receipt_items_output_schema_validates():
+    out = receipt_items.ReceiptItemsOutput.model_validate(
+        {"found_items": True, "items": [{"name": "MILK", "quantity": 1, "price": 3.49}, {"name": "EGGS"}]}
+    )
+    assert out.found_items is True
+    assert out.items[1].quantity is None and out.items[1].price is None
 
 
 # --- output-schema validation -------------------------------------------------

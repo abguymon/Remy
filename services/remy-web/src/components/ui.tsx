@@ -355,15 +355,27 @@ export function ConfirmDialog({
 // --- Toast host ------------------------------------------------------------
 
 export function ToastHost() {
-  const { message, dismiss } = useToast()
+  const { message, action, dismiss } = useToast()
   if (!message) return null
   return (
     <div
-      onClick={dismiss}
-      className="absolute bottom-24 left-1/2 z-20 -translate-x-1/2 animate-pop cursor-pointer whitespace-nowrap rounded-xl bg-ink px-4 py-2.5 text-[13px] font-medium text-cream shadow-toast"
+      className="absolute bottom-24 left-1/2 z-20 flex -translate-x-1/2 animate-pop items-center gap-3 whitespace-nowrap rounded-xl bg-ink px-4 py-2.5 text-[13px] font-medium text-cream shadow-toast"
       role="status"
     >
-      {message}
+      <span className="cursor-pointer" onClick={dismiss}>
+        {message}
+      </span>
+      {action && (
+        <button
+          onClick={() => {
+            action.run()
+            dismiss()
+          }}
+          className="flex-none font-bold text-[#E4B8A6]"
+        >
+          {action.label}
+        </button>
+      )}
     </div>
   )
 }

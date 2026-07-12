@@ -4,8 +4,16 @@
 // manual search, scoped item retry, and a sticky live estimated-total bar.
 import { useEffect, useState } from 'react'
 import { ApiError } from '../../lib/api'
-import { useCartEdits, useExecuteCart, useRetry, useSettings } from '../../lib/queries'
-import type { Alternative, CartEdit, MatchItem, PlanSnapshot } from '../../lib/types'
+import {
+  useCartEdits,
+  useExecuteCart,
+  useHideUsual,
+  useRetry,
+  useSettings,
+  useUnhideUsual,
+  useUsuals,
+} from '../../lib/queries'
+import type { Alternative, CartEdit, MatchItem, PlanSnapshot, Usual } from '../../lib/types'
 import { money, stockLabel } from '../../lib/format'
 import { toast } from '../../stores/toast'
 import {
@@ -124,6 +132,10 @@ export default function Step3Cart({ snapshot, live }: { snapshot: PlanSnapshot; 
         </div>
       </div>
 
+      {live && !matching && (
+        <UsualsStrip snapshot={snapshot} onAdd={(upc) => applyEdit({ op: 'add_upc', upc })} />
+      )}
+
       <StickyBar>
         <div className="mb-2 flex items-baseline justify-between">
           <span className="text-[13px] text-muted">
@@ -239,6 +251,11 @@ function CartItemCard({
             {source && <SourceLine source={source} />}
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               <StatusPill tone={pill.tone}>{pill.label}</StatusPill>
+              {item.is_usual && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-badge-favbg px-2 py-[3px] text-[11px] font-semibold text-badge-favfg">
+                  ★ Your usual
+                </span>
+              )}
               {item.status === 'substituted' && (
                 <span className="text-[11px] text-warn">wanted: {item.search_term}</span>
               )}
@@ -391,6 +408,97 @@ function AltRow({ alt, onChoose }: { alt: Alternative; onChoose: () => void }) {
       </span>
       <span className="tab-fig text-[13.5px] font-bold">{money(alt.price)}</span>
     </button>
+  )
+}
+
+// "Add your usuals?" — a horizontal strip of remembered products NOT already in
+// the current cart draft (compared by UPC, including dropped items). Tapping a
+// chip appends it via the add_upc cart edit; the chip's ✕ hides it (with undo).
+// Renders nothing when there is nothing to suggest (cold-start silence).
+function UsualsStrip({
+  snapshot,
+  onAdd,
+}: {
+  snapshot: PlanSnapshot
+  onAdd: (upc: string) => void
+}) {
+  const usuals = useUsuals(24)
+  const hide = useHideUsual()
+  const unhide = useUnhideUsual()
+
+  // Every UPC currently represented in the draft — dropped lines included, so a
+  // just-removed item isn't re-suggested back at the user.
+  const inCart = new Set(
+    snapshot.cart.items.map((it) => it.chosen?.upc).filter((u): u is string => !!u),
+  )
+  const suggestions = (usuals.data ?? []).filter((u) => !inCart.has(u.upc))
+  if (suggestions.length === 0) return null
+
+  async function onHide(u: Usual) {
+    try {
+      await hide.mutateAsync(u.upc)
+      toast(`Hid ${u.description ?? 'usual'}`, {
+        label: 'Undo',
+        run: () => {
+          unhide.mutate(u.upc)
+        },
+      })
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'Could not hide.')
+    }
+  }
+
+  return (
+    <div className="flex-none border-t border-line bg-surface/95 px-[18px] pb-1 pt-3">
+      <div className="mb-2 text-[11px] font-bold uppercase tracking-[.05em] text-faint">
+        Add your usuals?
+      </div>
+      <div className="no-scrollbar -mx-[18px] flex gap-2.5 overflow-x-auto px-[18px] pb-2">
+        {suggestions.map((u) => (
+          <UsualChip key={`${u.food_key}-${u.upc}`} usual={u} onAdd={() => onAdd(u.upc)} onHide={() => onHide(u)} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function UsualChip({
+  usual,
+  onAdd,
+  onHide,
+}: {
+  usual: Usual
+  onAdd: () => void
+  onHide: () => void
+}) {
+  return (
+    <div className="relative w-[112px] flex-none">
+      <button
+        onClick={onAdd}
+        className="flex w-full flex-col items-center gap-1.5 rounded-[13px] border border-line2 bg-cream/60 p-2.5 text-center hover:border-terracotta"
+      >
+        <span className="flex h-[52px] w-[52px] items-center justify-center overflow-hidden rounded-[10px] border border-tile bg-white">
+          {usual.image_url ? (
+            <img src={usual.image_url} alt="" className="h-full w-full object-contain p-1" />
+          ) : (
+            <span className="font-mono text-[8px] text-hint">img</span>
+          )}
+        </span>
+        <span className="line-clamp-2 text-[11.5px] font-semibold leading-tight text-ink">
+          {usual.description ?? usual.food_key}
+        </span>
+        <span className="tab-fig text-[11.5px] font-bold text-terracotta">
+          {usual.last_price != null ? `＋ ${money(usual.last_price)}` : '＋ Add'}
+        </span>
+      </button>
+      <button
+        aria-label={`Hide ${usual.description ?? usual.food_key}`}
+        onClick={onHide}
+        className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-line2 bg-surface text-[10px] leading-none text-muted shadow-sm"
+      >
+        ✕
+      </button>
+    </div>
   )
 }
 

@@ -130,6 +130,9 @@ export interface MatchItem {
   alternatives: Alternative[]
   error: string | null
   confidence: number | null
+  // Chosen from purchase memory (a "usual") — the match short-circuit skipped
+  // ranking, or it was added from the usuals strip.
+  is_usual: boolean
 }
 
 export interface CartState {
@@ -190,11 +193,12 @@ export interface ListEdit {
 }
 
 export interface CartEdit {
-  op: 'swap' | 'drop' | 'set_count' | 'manual_search'
-  item_id: string
+  op: 'swap' | 'drop' | 'set_count' | 'manual_search' | 'add_upc'
+  item_id?: string | null
   alternative_id?: string | null
   count?: number | null
   term?: string | null
+  upc?: string | null // for 'add_upc' (add a remembered usual to the cart)
 }
 
 export interface RetryRequest {
@@ -301,6 +305,71 @@ export interface OrderRecord {
   items: OrderItem[]
   estimated_total: number | null
   created_at: string
+}
+
+// --- usuals (purchase memory) ---
+export interface Usual {
+  upc: string
+  description: string | null
+  size: string | null
+  image_url: string | null
+  last_price: number | null
+  food_key: string
+  source: string // 'order' | 'swap' | 'pinned' | 'import'
+  times_ordered: number
+  preferred: boolean
+}
+
+export interface UsualPin {
+  upc: string
+  description?: string | null
+  size?: string | null
+  image_url?: string | null
+  price?: number | null
+  food_key: string
+}
+
+// A Kroger product card (usuals pin-search results).
+export interface ProductSearchResult {
+  upc: string
+  description: string | null
+  brand: string | null
+  size: string | null
+  price: number | null
+  image_url: string | null
+  stock_level: string
+}
+
+// Import review payload (receipt / order-history → matched products).
+export interface ImportProductMatch {
+  upc: string
+  description: string | null
+  brand: string | null
+  size: string | null
+  price: number | null
+  image_url: string | null
+}
+
+export interface ImportReviewItem {
+  extracted_name: string
+  food_key: string
+  quantity: number | null
+  matched: ImportProductMatch | null
+  alternatives: ImportProductMatch[]
+}
+
+export interface ImportReviewResponse {
+  found_items: boolean
+  items: ImportReviewItem[]
+}
+
+export interface ImportConfirmSelection {
+  food_key: string
+  upc: string
+  description?: string | null
+  size?: string | null
+  image_url?: string | null
+  price?: number | null
 }
 
 // --- kroger store search ---

@@ -18,10 +18,11 @@ import uuid
 
 from sqlalchemy import select
 
+from remy_api import memory
 from remy_api.kroger.errors import KrogerError, KrogerNotConnectedError
-from remy_api.kroger.models import Product
+from remy_api.kroger.models import Product, StockLevel
 from remy_api.llm.errors import LLMError
-from remy_api.models import KrogerToken, Plan, PlanStatus, UserSettings
+from remy_api.models import KrogerToken, Plan, PlanStatus, ProductMemory, UserSettings
 from remy_api.planner import deps
 from remy_api.planner.schemas import (
     Alternative,
@@ -33,7 +34,7 @@ from remy_api.planner.schemas import (
     MatchStage,
     ProductRef,
 )
-from remy_api.planner.substitution import MatchStatus, select_product
+from remy_api.planner.substitution import MatchStatus, _fulfillment_ok, select_product
 from remy_api.prompts import product_extraction, product_ranking
 
 logger = logging.getLogger("remy.planner.matching")
@@ -47,6 +48,42 @@ _STATUS_MAP = {
     MatchStatus.STOCK_UNKNOWN: ItemStatus.STOCK_UNKNOWN,
     MatchStatus.NOT_FOUND: ItemStatus.NOT_FOUND,
 }
+
+# Stock levels a remembered "usual" may be chosen at directly (out-of-stock falls
+# through to normal ranking so the substitution walk can pick something else).
+_CONFIRMED_STOCK = {StockLevel.HIGH, StockLevel.MEDIUM, StockLevel.LOW}
+
+
+def _usual_from_products(
+    item: MatchItem,
+    products: list[Product],
+    fulfillment: str | None,
+    usuals: dict[str, list[ProductMemory]] | None,
+) -> bool:
+    """Match short-circuit (FR-13, post-launch usuals): if a remembered product
+    for this food is in the search results and is obtainable (fulfillment-ok and
+    not out of stock), choose it directly and skip the P5 ranking LLM call.
+
+    Sets ``item.chosen``/``status``/``is_usual`` and up to 3 alternatives (the
+    next search results). Returns ``True`` when the short-circuit fired.
+    """
+    if not usuals:
+        return False
+    row = memory.pick_usual(usuals.get(memory.food_key(item.search_term)))
+    if row is None:
+        return False
+    prod = next((p for p in products if p.upc == row.upc), None)
+    if prod is None:
+        return False
+    if not _fulfillment_ok(prod, fulfillment) or prod.stock_level == StockLevel.TEMPORARILY_OUT_OF_STOCK:
+        return False
+    item.chosen = _product_ref(prod)
+    item.is_usual = True
+    item.status = ItemStatus.MATCHED if prod.stock_level in _CONFIRMED_STOCK else ItemStatus.STOCK_UNKNOWN
+    item.alternatives = [
+        Alternative(alternative_id=p.upc, **_product_ref(p).model_dump()) for p in products if p.upc != prod.upc
+    ][:3]
+    return True
 
 
 def _effective_price(product: Product) -> float | None:
@@ -142,8 +179,20 @@ async def _rank(term: str, target_size: str | None, package_qty: int, products: 
     return ordered or products
 
 
-async def _match_one(item: MatchItem, location_id: str, fulfillment: str | None) -> MatchItem:
-    """Search + rank + substitute for one extracted product."""
+async def _match_one(
+    item: MatchItem,
+    location_id: str,
+    fulfillment: str | None,
+    *,
+    usuals: dict[str, list[ProductMemory]] | None = None,
+) -> MatchItem:
+    """Search + rank + substitute for one extracted product.
+
+    When ``usuals`` is supplied and a remembered obtainable product is in the
+    results, take the short-circuit path (no P5 ranking). Otherwise fall through
+    to normal ranking + the A.8 substitution walk.
+    """
+    item.is_usual = False  # clear any stale flag on a re-match/manual search
     try:
         products = await deps.kroger_search_products(
             None, item.search_term, location_id, limit=_SEARCH_LIMIT, fulfillment=fulfillment
@@ -151,6 +200,9 @@ async def _match_one(item: MatchItem, location_id: str, fulfillment: str | None)
     except KrogerError as exc:
         item.status = ItemStatus.FAILED
         item.error = getattr(exc, "message", str(exc))
+        return item
+
+    if _usual_from_products(item, products, fulfillment, usuals):
         return item
 
     ranked = await _rank(item.search_term, item.target_size, item.count, products)
@@ -193,6 +245,10 @@ async def run_match(plan_id: str) -> None:
         settings = settings_row.scalar_one_or_none()
         location_id = settings.store_location_id if settings else None
         fulfillment = (settings.fulfillment_method.lower() if settings else "pickup") or "pickup"
+        # Preload purchase memory once so the concurrent search phase can take the
+        # usual short-circuit without per-item DB reads (rows stay usable detached
+        # — expire_on_commit is off and there is no commit before we read them).
+        usuals = await memory.load_usuals_map(session, user_id)
         list_state = ListState(**(plan.list_lines or {}))
         approved = [ln for ln in list_state.lines if ln.included and ln.group.value == "to_buy"]
 
@@ -258,7 +314,7 @@ async def run_match(plan_id: str) -> None:
     async def _do(item: MatchItem) -> None:
         async with sem:
             try:
-                resolved = await _match_one(item, location_id, fulfillment)
+                resolved = await _match_one(item, location_id, fulfillment, usuals=usuals)
             except KrogerNotConnectedError:
                 raise
             except Exception as exc:  # noqa: BLE001 - never let one item sink the run
@@ -293,8 +349,48 @@ async def run_match(plan_id: str) -> None:
 # --- cart edit operations (FR-15) --------------------------------------------
 
 
+async def _add_usual_to_cart(
+    session,  # noqa: ANN001
+    user_id: str,
+    cart: CartState,
+    by_id: dict,
+    upc: str | None,
+) -> None:
+    """``add_upc`` cart edit: append a matched cart line from a remembered usual.
+
+    No LLM and no Kroger call — the product snapshot comes straight from memory
+    (price included). Re-adding a UPC already live in the cart is a no-op.
+    """
+    if not upc:
+        return
+    live = {it.chosen.upc for it in cart.items if it.chosen and it.status != ItemStatus.DROPPED}
+    if upc in live:
+        return
+    rows = [r for r in await memory.rows_for_upc(session, user_id, upc) if not r.hidden]
+    if not rows:
+        return
+    row = memory.pick_usual(rows) or rows[0]
+    item = MatchItem(
+        id=uuid.uuid4().hex,
+        line_id="",  # not derived from a shopping-list line
+        search_term=row.description or row.food_key,
+        count=1,
+        status=ItemStatus.MATCHED,
+        is_usual=True,
+        chosen=ProductRef(
+            upc=row.upc,
+            description=row.description,
+            size=row.size,
+            price=row.last_price,
+            image_url=row.image_url,
+        ),
+    )
+    cart.items.append(item)
+    by_id[item.id] = item
+
+
 async def apply_cart_edits(session, plan: Plan, ops: list) -> None:  # noqa: ANN001
-    """Apply swap/drop/set_count/manual_search to the cart draft (reviewing_cart)."""
+    """Apply swap/drop/set_count/manual_search/add_upc to the cart draft (reviewing_cart)."""
     cart = CartState(**(plan.matches or {}))
     by_id = {it.id: it for it in cart.items}
 
@@ -309,6 +405,9 @@ async def apply_cart_edits(session, plan: Plan, ops: list) -> None:  # noqa: ANN
         fulfillment = (settings.fulfillment_method.lower() if settings else "pickup") or "pickup"
 
     for op in ops:
+        if op.op == "add_upc":
+            await _add_usual_to_cart(session, plan.user_id, cart, by_id, op.upc)
+            continue
         item = by_id.get(op.item_id)
         if item is None:
             continue
@@ -326,6 +425,18 @@ async def apply_cart_edits(session, plan: Plan, ops: list) -> None:  # noqa: ANN
                     item.alternatives.insert(0, Alternative(alternative_id=previous.upc, **previous.model_dump()))
                 item.chosen = ProductRef(**alt.model_dump(exclude={"alternative_id"}))
                 item.status = ItemStatus.MATCHED
+                item.is_usual = False  # a manual swap is a user pick, not an auto-usual
+                # Remember the swap as a preference for this food (clears siblings).
+                await memory.record_swap(
+                    session,
+                    plan.user_id,
+                    search_term=item.search_term,
+                    upc=item.chosen.upc,
+                    description=item.chosen.description,
+                    size=item.chosen.size,
+                    image_url=item.chosen.image_url,
+                    price=item.chosen.price,
+                )
         elif op.op == "manual_search" and op.term and location_id:
             item.search_term = op.term
             item.status = ItemStatus.MATCHING

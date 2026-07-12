@@ -155,6 +155,7 @@ def _match_item_view(item: MatchItem) -> dict:
         "status": str(item.status),
         "count": item.count,
         "is_substitution": item.status == ItemStatus.SUBSTITUTED,
+        "is_usual": item.is_usual,
         "confidence": item.confidence,
         "error": item.error,
         "product": chosen,

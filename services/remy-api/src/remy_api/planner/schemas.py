@@ -195,6 +195,9 @@ class MatchItem(BaseModel):
     alternatives: list[Alternative] = Field(default_factory=list)
     error: str | None = None
     confidence: float | None = None
+    # True when this product was chosen from purchase memory (a "usual") — the
+    # match short-circuit skipped P5 ranking, or it was added from the usuals strip.
+    is_usual: bool = False
 
 
 class CartState(BaseModel):
@@ -280,11 +283,14 @@ class ListEditRequest(BaseModel):
 
 
 class CartEdit(BaseModel):
-    op: str = Field(description="'swap' | 'drop' | 'set_count' | 'manual_search'")
-    item_id: str
+    op: str = Field(description="'swap' | 'drop' | 'set_count' | 'manual_search' | 'add_upc'")
+    # ``item_id`` targets an existing cart line; ``add_upc`` targets no line (it
+    # appends one) so it is optional.
+    item_id: str | None = None
     alternative_id: str | None = None
     count: int | None = None
     term: str | None = None  # for 'manual_search'
+    upc: str | None = None  # for 'add_upc' (add a remembered usual to the cart)
 
 
 class CartEditRequest(BaseModel):
