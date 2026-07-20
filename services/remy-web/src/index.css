@@ -82,4 +82,24 @@
     background-color: #eee4d3;
     background-image: repeating-linear-gradient(135deg, #e9decb 0 11px, #ede3d2 11px 22px);
   }
+  /* Indeterminate app-level progress for async work without granular progress. */
+  .activity-bar {
+    animation: activity-slide 1.15s ease-in-out infinite;
+    transform: translateX(-110%);
+  }
+}
+
+@keyframes activity-slide {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(410%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-bar {
+    animation-duration: 2.5s;
+  }
 }

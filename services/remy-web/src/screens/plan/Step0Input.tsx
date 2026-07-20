@@ -146,6 +146,7 @@ export default function Step0Input({
       <Button
         className="mt-3 w-full py-3.5 text-[15.5px] font-bold"
         onClick={submit}
+        busy={createPlan.isPending}
         disabled={!text.trim() || createPlan.isPending}
       >
         {createPlan.isPending ? 'Finding recipes…' : 'Find recipes →'}

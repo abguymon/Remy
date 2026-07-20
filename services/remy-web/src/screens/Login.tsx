@@ -68,7 +68,12 @@ export default function Login() {
           onChange={(e) => setPassword(e.target.value)}
           className="rounded-[11px] border border-line2 bg-surface px-4 py-3.5 text-[15px] outline-none focus:border-terracotta"
         />
-        <Button type="submit" className="mt-1 py-3.5 text-[15px]" disabled={login.isPending}>
+        <Button
+          type="submit"
+          className="mt-1 py-3.5 text-[15px]"
+          busy={login.isPending}
+          disabled={login.isPending}
+        >
           {login.isPending ? 'Signing in…' : 'Sign in'}
         </Button>
       </form>

@@ -317,6 +317,7 @@ function UrlForm({
         <Button
           className="flex-1 py-3 text-sm"
           onClick={submit}
+          busy={create.isPending}
           disabled={create.isPending || !url.trim()}
         >
           {create.isPending ? 'Reading…' : 'Add recipe'}
@@ -526,6 +527,7 @@ function UploadForm({
         <Button
           className="flex-1 py-3 text-sm"
           onClick={submit}
+          busy={create.isPending}
           disabled={create.isPending || picked.length === 0}
         >
           {create.isPending ? 'Reading…' : 'Add recipe'}

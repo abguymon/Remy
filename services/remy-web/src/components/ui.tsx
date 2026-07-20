@@ -23,15 +23,33 @@ export function Button({
   variant = 'primary',
   className = '',
   children,
+  busy = false,
+  busyLabel,
+  disabled,
   ...rest
 }: {
   variant?: ButtonVariant
   className?: string
   children: ReactNode
+  busy?: boolean
+  busyLabel?: ReactNode
 } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  const spinnerClass =
+    variant === 'primary'
+      ? '!border-white/40 !border-t-white'
+      : variant === 'danger'
+        ? '!border-danger-border !border-t-danger'
+        : ''
+
   return (
-    <button className={`${buttonBase} ${buttonVariants[variant]} ${className}`} {...rest}>
-      {children}
+    <button
+      className={`${buttonBase} ${buttonVariants[variant]} ${className}`}
+      disabled={disabled || busy}
+      aria-busy={busy || undefined}
+      {...rest}
+    >
+      {busy && <Spinner className={spinnerClass} />}
+      {busy && busyLabel !== undefined ? busyLabel : children}
     </button>
   )
 }

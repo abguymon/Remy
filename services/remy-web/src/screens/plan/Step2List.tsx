@@ -182,6 +182,7 @@ export default function Step2List({ snapshot, live }: { snapshot: PlanSnapshot; 
       <StickyBar>
         <Button
           className="w-full py-3.5 text-[15.5px] font-bold"
+          busy={approve.isPending}
           disabled={!live || approve.isPending}
           onClick={onApprove}
         >

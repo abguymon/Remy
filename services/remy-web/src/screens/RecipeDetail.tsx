@@ -13,7 +13,7 @@ import {
 } from '../lib/queries'
 import type { RecipeDetail as Recipe } from '../lib/types'
 import { toast } from '../stores/toast'
-import { AuthedImage, Button, ConfirmDialog, EmptyState, Spinner } from '../components/ui'
+import { AuthedImage, Button, ConfirmDialog, EmptyState } from '../components/ui'
 
 function domainOf(url: string | null): string {
   if (!url) return ''
@@ -114,13 +114,14 @@ export default function RecipeDetail() {
         <div className="mt-4 flex gap-2.5">
           <Button
             className="flex-1 py-3 text-sm"
+            busy={cooked.isPending}
             disabled={cooked.isPending}
             onClick={async () => {
               await cooked.mutateAsync()
               toast('Marked as cooked')
             }}
           >
-            {cooked.isPending ? <Spinner className="!border-t-white" /> : 'I cooked this'}
+            {cooked.isPending ? 'Marking cooked…' : 'I cooked this'}
           </Button>
           <Button
             variant="secondary"
@@ -289,6 +290,7 @@ function EditSheet({ recipe, onClose }: { recipe: Recipe; onClose: () => void })
           <Button
             className="w-full py-3.5 text-[15px]"
             onClick={save}
+            busy={update.isPending}
             disabled={update.isPending}
           >
             {update.isPending ? 'Saving…' : 'Save changes'}

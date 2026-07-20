@@ -147,6 +147,7 @@ export default function Step3Cart({ snapshot, live }: { snapshot: PlanSnapshot; 
         </div>
         <Button
           className="w-full py-3.5 text-[15.5px] font-bold"
+          busy={executeCart.isPending}
           disabled={!live || matching || itemCount === 0 || executeCart.isPending}
           onClick={onExecute}
         >
