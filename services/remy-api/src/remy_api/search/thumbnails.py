@@ -2,8 +2,9 @@
 
 Thumbnails are cosmetic (PRD §7.3): a failure for one URL returns ``None`` and
 never raises or blocks. Uses a real HTML parser (selectolax) rather than the
-legacy regex-over-raw-HTML approach (Appendix A.9), with a streaming 200KB cap,
-a short per-URL timeout, and bounded concurrency across a batch.
+legacy regex-over-raw-HTML approach (Appendix A.9), with a bounded streaming
+read through the document head, a short per-URL timeout, and bounded
+concurrency across a batch.
 """
 
 from __future__ import annotations
@@ -18,7 +19,10 @@ from remy_api.net import BLOCKED_STATUSES, impersonated_get
 
 logger = logging.getLogger(__name__)
 
-_MAX_BYTES = 200_000
+# Some recipe sites inject enough scripts and styles ahead of their social meta
+# tags to push og:image beyond 200KB. Read through </head> when possible, while
+# retaining a hard ceiling for malformed pages that never close their head.
+_MAX_HEAD_BYTES = 1_000_000
 _TIMEOUT = 5.0
 _CONCURRENCY = 8
 _HEADERS = {
@@ -49,6 +53,17 @@ def _extract_image(html: str) -> str | None:
     return None
 
 
+def _decode_head(content: bytes) -> str:
+    """Decode only the HTML head from a bounded response prefix."""
+    lowered = content.lower()
+    head_start = lowered.find(b"</head")
+    if head_start >= 0:
+        head_end = lowered.find(b">", head_start)
+        if head_end >= 0:
+            content = content[: head_end + 1]
+    return content.decode("utf-8", errors="ignore")
+
+
 async def fetch_og_image(
     url: str,
     client: httpx.AsyncClient | None = None,
@@ -76,10 +91,11 @@ async def fetch_og_image(
             buf = bytearray()
             async for chunk in response.aiter_bytes():
                 buf.extend(chunk)
-                if len(buf) >= _MAX_BYTES:
+                if len(buf) > _MAX_HEAD_BYTES:
+                    del buf[_MAX_HEAD_BYTES:]
+                if b"</head" in buf.lower() or len(buf) >= _MAX_HEAD_BYTES:
                     break
-            html = buf.decode("utf-8", errors="ignore")
-            return _extract_image(html)
+            return _extract_image(_decode_head(bytes(buf)))
     except Exception as exc:  # noqa: BLE001 - cosmetic; log at debug and move on
         logger.debug("og:image fetch failed for %s: %s", url, exc)
         return None
@@ -89,10 +105,10 @@ async def fetch_og_image(
 
 
 async def _fetch_og_image_impersonated(url: str, timeout: float) -> str | None:
-    """curl_cffi fallback for og:image, keeping the 200KB cap and never raising."""
+    """curl_cffi fallback for og:image, keeping the bounded head read."""
     try:
         status, content, ctype = await impersonated_get(
-            url, headers=_HEADERS, timeout=timeout, max_bytes=_MAX_BYTES
+            url, headers=_HEADERS, timeout=timeout, max_bytes=_MAX_HEAD_BYTES
         )
     except Exception as exc:  # noqa: BLE001 - cosmetic; log at debug and move on
         logger.debug("og:image impersonated fetch failed for %s: %s", url, exc)
@@ -101,8 +117,7 @@ async def _fetch_og_image_impersonated(url: str, timeout: float) -> str | None:
         return None
     if ctype and "html" not in ctype.lower():
         return None
-    html = content.decode("utf-8", errors="ignore")
-    return _extract_image(html)
+    return _extract_image(_decode_head(content))
 
 
 async def fetch_thumbnails(urls: list[str], concurrency: int = _CONCURRENCY) -> dict[str, str | None]:

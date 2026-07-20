@@ -2,6 +2,8 @@
 // The content column scrolls; sticky action bars live inside each screen and
 // sit above the phone tab bar. ToastHost is mounted here so toasts float over
 // every screen.
+import { useEffect, useRef, useState } from 'react'
+import { useIsFetching, useIsMutating } from '@tanstack/react-query'
 import { NavLink, Outlet } from 'react-router-dom'
 import { ToastHost } from './ui'
 import RatIcon from './RatIcon'
@@ -41,6 +43,7 @@ export default function AppShell() {
 
       {/* Content column */}
       <div className="relative flex min-w-0 flex-1 flex-col">
+        <GlobalActivityIndicator />
         <main className="no-scrollbar relative flex-1 overflow-y-auto">
           <div className="mx-auto w-full lg:max-w-[780px]">
             <Outlet />
@@ -73,6 +76,49 @@ export default function AppShell() {
         </nav>
 
         <ToastHost />
+      </div>
+    </div>
+  )
+}
+
+// A quiet, app-wide fallback for requests without a more local progress state.
+// Delaying its appearance avoids a distracting flash for fast cache refreshes;
+// once shown, it remains long enough to be perceived rather than flickering.
+function GlobalActivityIndicator() {
+  const fetching = useIsFetching()
+  const mutating = useIsMutating()
+  const active = fetching + mutating > 0
+  const [visible, setVisible] = useState(false)
+  const shownAt = useRef(0)
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>
+    if (active && !visible) {
+      timer = setTimeout(() => {
+        shownAt.current = Date.now()
+        setVisible(true)
+      }, 180)
+    } else if (!active && visible) {
+      const remaining = Math.max(0, 450 - (Date.now() - shownAt.current))
+      timer = setTimeout(() => setVisible(false), remaining)
+    }
+    return () => clearTimeout(timer)
+  }, [active, visible])
+
+  if (!visible) return null
+
+  return (
+    <div
+      className="pointer-events-none absolute inset-x-0 top-0 z-50"
+      role="status"
+      aria-live="polite"
+    >
+      <div className="h-[3px] overflow-hidden bg-terracotta-soft">
+        <div className="activity-bar h-full w-1/3 rounded-full bg-terracotta" />
+      </div>
+      <div className="absolute right-3 top-2 flex items-center gap-2 rounded-full border border-line2 bg-surface/95 px-3 py-1.5 text-[11.5px] font-semibold text-muted shadow-cardsoft backdrop-blur">
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-terracotta" aria-hidden />
+        {mutating > 0 ? 'Working…' : 'Updating…'}
       </div>
     </div>
   )

@@ -134,7 +134,7 @@ function AddRecipeSheet({
 
   return (
     <div
-      className="absolute inset-0 z-30 flex animate-pop items-end justify-center sm:items-center"
+      className="fixed inset-0 z-30 flex animate-pop items-end justify-center sm:items-center"
       style={{ background: 'rgba(40,30,20,.4)' }}
       onClick={() => {
         if (!busy.current) onClose()
@@ -317,6 +317,7 @@ function UrlForm({
         <Button
           className="flex-1 py-3 text-sm"
           onClick={submit}
+          busy={create.isPending}
           disabled={create.isPending || !url.trim()}
         >
           {create.isPending ? 'Reading…' : 'Add recipe'}
@@ -526,6 +527,7 @@ function UploadForm({
         <Button
           className="flex-1 py-3 text-sm"
           onClick={submit}
+          busy={create.isPending}
           disabled={create.isPending || picked.length === 0}
         >
           {create.isPending ? 'Reading…' : 'Add recipe'}

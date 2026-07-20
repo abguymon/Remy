@@ -21,7 +21,7 @@ from remy_api.errors import register_error_handlers
 from remy_api.kroger import close_client, register_kroger_error_handler
 from remy_api.llm.errors import LLMError
 from remy_api.observability import shutdown_langfuse
-from remy_api.routers import admin, auth, kroger, orders, plan, recipes, users
+from remy_api.routers import admin, auth, kroger, orders, plan, recipes, users, usuals
 from remy_api.search.base import SearchError
 
 # Fail closed: importing the app validates required secrets. A misconfigured
@@ -90,6 +90,7 @@ async def _handle_search_error(_request, exc: SearchError):  # noqa: ANN001, ANN
 
 app.include_router(auth.router)
 app.include_router(users.router)
+app.include_router(usuals.router)
 app.include_router(admin.router)
 app.include_router(kroger.router)
 app.include_router(recipes.router)

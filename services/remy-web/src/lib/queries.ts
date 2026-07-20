@@ -10,6 +10,8 @@ import type {
   ApiTokenCreated,
   ApiTokenInfo,
   CartEdit,
+  ImportConfirmSelection,
+  ImportReviewResponse,
   KrogerAuthResponse,
   KrogerStatus,
   ListEdit,
@@ -17,6 +19,7 @@ import type {
   OrderRecord,
   PasswordChange,
   PlanSnapshot,
+  ProductSearchResult,
   RecipeDetail,
   RecipeSummary,
   RetryRequest,
@@ -25,6 +28,8 @@ import type {
   StoreLocation,
   TempPasswordResponse,
   TokenResponse,
+  Usual,
+  UsualPin,
   UserProfile,
 } from './types'
 
@@ -279,6 +284,78 @@ export function useRevokeApiToken() {
   return useMutation({
     mutationFn: (id: string) => api.del<void>(`/users/me/api-tokens/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['api-tokens'] }),
+  })
+}
+
+// --- usuals (purchase memory) ----------------------------------------------
+
+export const usualsKey = ['usuals'] as const
+
+export function useUsuals(limit = 12) {
+  return useQuery({
+    queryKey: [...usualsKey, limit],
+    queryFn: () => api.get<Usual[]>(`/users/me/usuals?limit=${limit}`),
+  })
+}
+
+export function usePinUsual() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: UsualPin) => api.post<Usual>('/users/me/usuals', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: usualsKey }),
+  })
+}
+
+export function useRemoveUsual() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (upc: string) => api.del<void>(`/users/me/usuals/${encodeURIComponent(upc)}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: usualsKey }),
+  })
+}
+
+export function useHideUsual() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (upc: string) => api.post<void>(`/users/me/usuals/${encodeURIComponent(upc)}/hide`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: usualsKey }),
+  })
+}
+
+export function useUnhideUsual() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (upc: string) => api.post<void>(`/users/me/usuals/${encodeURIComponent(upc)}/unhide`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: usualsKey }),
+  })
+}
+
+// Product search at the user's store (for pinning a usual).
+export function useProductSearch() {
+  return useMutation({
+    mutationFn: (term: string) =>
+      api.get<ProductSearchResult[]>(`/kroger/products?term=${encodeURIComponent(term)}`),
+  })
+}
+
+// Receipt / order-history import: extract → review (nothing saved yet).
+export function useImportUsuals() {
+  return useMutation({
+    mutationFn: ({ files, text }: { files?: File[]; text?: string }) => {
+      const form = new FormData()
+      for (const file of files ?? []) form.append('files', file)
+      if (text && text.trim()) form.append('text', text.trim())
+      return api.upload<ImportReviewResponse>('/users/me/usuals/import', form)
+    },
+  })
+}
+
+export function useConfirmImport() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (selections: ImportConfirmSelection[]) =>
+      api.post<{ seeded: number }>('/users/me/usuals/import/confirm', { selections }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: usualsKey }),
   })
 }
 

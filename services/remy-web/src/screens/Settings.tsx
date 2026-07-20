@@ -32,6 +32,7 @@ import type {
 import { shortDate } from '../lib/format'
 import { toast } from '../stores/toast'
 import { Button, ConfirmDialog, SectionLabel, Spinner } from '../components/ui'
+import UsualsSettings from './settings/UsualsSettings'
 
 const KROGER_ERRORS: Record<string, string> = {
   exchange_failed: "Couldn't complete the Kroger connection. Try again.",
@@ -79,6 +80,7 @@ export default function Settings() {
       <div className="font-serif text-[28px] font-semibold tracking-tight">Settings</div>
       <KrogerSection />
       <StoreSection settings={settings.data} />
+      <UsualsSettings settings={settings.data} />
       <PantrySection settings={settings.data} />
       <SitesSection settings={settings.data} />
       <TokensSection />
@@ -889,7 +891,7 @@ function SecretModal({
 
   return (
     <div
-      className="absolute inset-0 z-30 flex animate-pop items-center justify-center p-6"
+      className="fixed inset-0 z-30 flex animate-pop items-center justify-center p-6"
       style={{ background: 'rgba(40,30,20,.4)' }}
       onClick={onClose}
     >

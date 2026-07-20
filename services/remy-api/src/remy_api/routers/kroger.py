@@ -25,9 +25,10 @@ from sqlalchemy import delete, select
 
 from remy_api.config import get_settings
 from remy_api.deps import CurrentUser, SessionDep
-from remy_api.errors import NotFoundError
+from remy_api.errors import ConflictError, NotFoundError
 from remy_api.kroger import (
     KrogerError,
+    Product,
     StoreLocation,
     banner_cart_url,
     generate_pkce,
@@ -35,6 +36,7 @@ from remy_api.kroger import (
     get_client,
     get_location,
     get_locations,
+    search_products,
     store_tokens,
 )
 from remy_api.models import FulfillmentMethod, KrogerToken, OAuthState, UserSettings
@@ -66,6 +68,31 @@ class StoreSelectResponse(BaseModel):
     store_chain: str | None
     zip_code: str | None
     cart_url: str
+
+
+class ProductSearchResult(BaseModel):
+    """A compact product card for the usuals pin-search UI (photo + name + price)."""
+
+    upc: str
+    description: str | None = None
+    brand: str | None = None
+    size: str | None = None
+    price: float | None = None
+    image_url: str | None = None
+    stock_level: str = "UNKNOWN"
+
+    @classmethod
+    def from_product(cls, p: Product) -> ProductSearchResult:
+        price = (p.price.promo or p.price.regular) if p.price else None
+        return cls(
+            upc=p.upc,
+            description=p.description,
+            brand=p.brand,
+            size=p.size,
+            price=price,
+            image_url=p.image_url,
+            stock_level=str(p.stock_level),
+        )
 
 
 @router.get("/auth", response_model=AuthUrlResponse)
@@ -134,6 +161,29 @@ async def kroger_stores(
     limit: int = Query(default=8, ge=1, le=50),
 ) -> list[StoreLocation]:
     return await get_locations(zip, limit=limit)
+
+
+@router.get("/products", response_model=list[ProductSearchResult])
+async def kroger_products(
+    user: CurrentUser,
+    session: SessionDep,
+    term: str = Query(min_length=1, max_length=128),
+    limit: int = Query(default=8, ge=1, le=25),
+) -> list[ProductSearchResult]:
+    """Search products at the user's preferred store (for pinning usuals).
+
+    Uses the shared app token (no user Kroger connection needed) but requires a
+    selected store — a 409 (``no_store_selected``) otherwise, matching the plan
+    approve gate, so the UI can prompt the user to pick a store first.
+    """
+    row = await session.execute(select(UserSettings).where(UserSettings.user_id == user.id))
+    settings = row.scalar_one_or_none()
+    location_id = settings.store_location_id if settings else None
+    if not location_id:
+        raise ConflictError("Select a preferred store in Settings first.", code="no_store_selected")
+    fulfillment = (settings.fulfillment_method.lower() if settings else "pickup") or "pickup"
+    products = await search_products(session, term, location_id, limit=limit, fulfillment=fulfillment)
+    return [ProductSearchResult.from_product(p) for p in products]
 
 
 @router.post("/stores/{location_id}/select", response_model=StoreSelectResponse)
