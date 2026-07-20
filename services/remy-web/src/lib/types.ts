@@ -429,3 +429,16 @@ export interface AdminUserCreated {
 export interface TempPasswordResponse {
   temp_password: string
 }
+
+export interface InvitationInfo {
+  id: string
+  recipient_label: string | null
+  created_at: string
+  expires_at: string
+  redeemed_at: string | null
+  revoked_at: string | null
+}
+
+export interface InvitationCreated extends InvitationInfo {
+  invitation_token: string
+}

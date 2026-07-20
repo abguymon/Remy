@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_hours: int = 168  # 7 days
     encryption_key: str = ""
+    auth_rate_limit_window_seconds: int = 900
+    auth_login_rate_limit: int = 10
+    auth_registration_rate_limit: int = 5
 
     # --- Database ---
     database_url: str = "sqlite+aiosqlite:///data/remy.db"
@@ -75,7 +78,6 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.0
     llm_timeout: float = 60.0
     llm_max_retries: int = 0  # transport retries; validation retry is separate
-
     # --- Langfuse Cloud observability (optional) ---
     langfuse_enabled: bool = False
     langfuse_public_key: str = ""

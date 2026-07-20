@@ -10,15 +10,24 @@ returned exactly once, mirroring the API-token show-once contract.
 from __future__ import annotations
 
 import secrets
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, status
 from sqlalchemy import select
 
 from remy_api.deps import AdminUser, SessionDep
 from remy_api.errors import NotFoundError, UnprocessableError
-from remy_api.models import KrogerToken, User
-from remy_api.schemas import AdminUserCreate, AdminUserCreated, AdminUserInfo, TempPasswordResponse
-from remy_api.security import hash_password
+from remy_api.models import Invitation, KrogerToken, User
+from remy_api.schemas import (
+    AdminUserCreate,
+    AdminUserCreated,
+    AdminUserInfo,
+    InvitationCreate,
+    InvitationCreated,
+    InvitationInfo,
+    TempPasswordResponse,
+)
+from remy_api.security import generate_invitation_token, hash_password
 from remy_api.user_service import create_user
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -84,6 +93,7 @@ async def reset_password(user_id: str, _admin: AdminUser, session: SessionDep) -
     user = await _load_user(session, user_id)
     temp_password = _temp_password()
     user.password_hash = hash_password(temp_password)
+    user.auth_version += 1
     await session.commit()
     return TempPasswordResponse(temp_password=temp_password)
 
@@ -105,3 +115,42 @@ async def activate_user(user_id: str, _admin: AdminUser, session: SessionDep) ->
     user.is_active = True
     await session.commit()
     return await _to_info(session, user)
+
+
+@router.get("/invitations", response_model=list[InvitationInfo])
+async def list_invitations(_admin: AdminUser, session: SessionDep) -> list[InvitationInfo]:
+    rows = (await session.execute(select(Invitation).order_by(Invitation.created_at.desc()))).scalars().all()
+    return [InvitationInfo.model_validate(inv) for inv in rows]
+
+
+@router.post("/invitations", response_model=InvitationCreated, status_code=status.HTTP_201_CREATED)
+async def create_invitation(payload: InvitationCreate, admin: AdminUser, session: SessionDep) -> InvitationCreated:
+    token, token_hash = generate_invitation_token()
+    invitation = Invitation(
+        token_hash=token_hash,
+        recipient_label=payload.recipient_label.strip() or None if payload.recipient_label else None,
+        created_by_user_id=admin.id,
+        expires_at=datetime.now(UTC) + timedelta(days=payload.expires_in_days),
+    )
+    session.add(invitation)
+    await session.commit()
+    await session.refresh(invitation)
+    return InvitationCreated(
+        id=invitation.id,
+        recipient_label=invitation.recipient_label,
+        created_at=invitation.created_at,
+        expires_at=invitation.expires_at,
+        redeemed_at=invitation.redeemed_at,
+        revoked_at=invitation.revoked_at,
+        invitation_token=token,
+    )
+
+
+@router.post("/invitations/{invitation_id}/revoke", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_invitation(invitation_id: str, _admin: AdminUser, session: SessionDep) -> None:
+    invitation = await session.get(Invitation, invitation_id)
+    if invitation is None:
+        raise NotFoundError("Invitation not found.")
+    if invitation.redeemed_at is None and invitation.revoked_at is None:
+        invitation.revoked_at = datetime.now(UTC)
+        await session.commit()

@@ -11,7 +11,9 @@ from remy_api.security import hash_password
 from remy_api.seed import default_favorite_sites, default_pantry_items
 
 
-async def create_user(session: AsyncSession, username: str, password: str, *, is_admin: bool = False) -> User:
+async def create_user(
+    session: AsyncSession, username: str, password: str, *, is_admin: bool = False, commit: bool = True
+) -> User:
     """Create a user + seeded default settings. Raises on duplicate username.
 
     Shared by the CLI bootstrap, the ``import-mealie`` owner path, and the admin
@@ -28,6 +30,9 @@ async def create_user(session: AsyncSession, username: str, password: str, *, is
         favorite_sites=default_favorite_sites(),
     )
     session.add(user)
-    await session.commit()
+    if commit:
+        await session.commit()
+    else:
+        await session.flush()
     await session.refresh(user)
     return user

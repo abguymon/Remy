@@ -48,6 +48,11 @@ class ConflictError(APIError):
     code = "conflict"
 
 
+class RateLimitError(APIError):
+    status_code = status.HTTP_429_TOO_MANY_REQUESTS
+    code = "rate_limited"
+
+
 class UnprocessableError(APIError):
     """A well-formed request that violates a business rule (422)."""
 

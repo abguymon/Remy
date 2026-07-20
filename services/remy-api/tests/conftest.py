@@ -49,6 +49,7 @@ def images_dir() -> str:
 async def _reset_schema() -> None:
     from sqlalchemy import text
 
+    from remy_api.rate_limit import reset_rate_limits
     from remy_api.recipes import store as _store
 
     engine = get_engine()
@@ -59,6 +60,7 @@ async def _reset_schema() -> None:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     _store._fts_available = None
+    reset_rate_limits()
 
 
 @pytest_asyncio.fixture

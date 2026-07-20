@@ -9,13 +9,16 @@ import {
   useApiTokens,
   useChangePassword,
   useCreateAdminUser,
+  useCreateInvitation,
   useCreateApiToken,
   useDisconnectKroger,
   useKrogerAuth,
+  useInvitations,
   useKrogerStatus,
   useMe,
   useResetUserPassword,
   useRevokeApiToken,
+  useRevokeInvitation,
   useSelectStore,
   useSetUserActive,
   useSettings,
@@ -24,6 +27,7 @@ import {
 } from '../lib/queries'
 import type {
   AdminUserInfo,
+  InvitationCreated,
   ApiTokenCreated,
   FulfillmentMethod,
   SettingsResponse,
@@ -84,6 +88,7 @@ export default function Settings() {
       <PantrySection settings={settings.data} />
       <SitesSection settings={settings.data} />
       <TokensSection />
+      {me.data?.is_admin && <InvitationsSection />}
       {me.data?.is_admin && <UsersSection currentUserId={me.data.id} />}
       <AccountSection />
     </div>
@@ -583,10 +588,10 @@ function AccountSection() {
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  const tooShort = next.length > 0 && next.length < 8
+  const tooShort = next.length > 0 && next.length < 12
   const mismatch = confirm.length > 0 && next !== confirm
   const canSubmit =
-    current.length > 0 && next.length >= 8 && confirm.length > 0 && next === confirm
+    current.length > 0 && next.length >= 12 && confirm.length > 0 && next === confirm
 
   async function submit() {
     setError(null)
@@ -594,8 +599,8 @@ function AccountSection() {
       setError('New passwords do not match.')
       return
     }
-    if (next.length < 8) {
-      setError('New password must be at least 8 characters.')
+    if (next.length < 12) {
+      setError('New password must be at least 12 characters.')
       return
     }
     try {
@@ -628,7 +633,7 @@ function AccountSection() {
           <input
             type="password"
             autoComplete="new-password"
-            placeholder="New password (min 8 characters)"
+            placeholder="New password (min 12 characters)"
             value={next}
             onChange={(e) => setNext(e.target.value)}
             className={inputClass}
@@ -646,7 +651,7 @@ function AccountSection() {
 
         {tooShort && (
           <div className="mt-2 text-[12.5px] text-muted">
-            New password must be at least 8 characters.
+            New password must be at least 12 characters.
           </div>
         )}
         {mismatch && <div className="mt-2 text-[12.5px] text-danger">Passwords don't match.</div>}
@@ -914,5 +919,53 @@ function SecretModal({
         </div>
       </div>
     </div>
+  )
+}
+
+// --- Invitations (admin only) ----------------------------------------------
+
+function InvitationsSection() {
+  const invitations = useInvitations(true)
+  const create = useCreateInvitation()
+  const revoke = useRevokeInvitation()
+  const [label, setLabel] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [created, setCreated] = useState<InvitationCreated | null>(null)
+  const active = (invitations.data ?? []).filter((invite) => !invite.redeemed_at && !invite.revoked_at && new Date(invite.expires_at) > new Date())
+  const inviteUrl = created ? window.location.origin + '/join#invite=' + created.invitation_token : ''
+
+  async function submit() {
+    try {
+      const invite = await create.mutateAsync({ recipient_label: label.trim() || undefined })
+      setCreated(invite)
+      setLabel('')
+      setCreating(false)
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'Could not create invitation.')
+    }
+  }
+
+  return (
+    <Section label="Invitations">
+      <div className="overflow-hidden rounded-card border border-line bg-surface">
+        <div className="px-3.5 py-3 text-[13px] text-muted">Invite someone with a one-time link. They choose their own password; links expire after 7 days.</div>
+        {active.map((invite) => (
+          <div key={invite.id} className="flex items-center gap-3 border-t border-divider px-3.5 py-3">
+            <div className="min-w-0 flex-1"><div className="truncate text-[14px] font-semibold">{invite.recipient_label || 'Unlabeled invitation'}</div><div className="text-[11.5px] text-faint">Expires {shortDate(invite.expires_at)}</div></div>
+            <button onClick={async () => { await revoke.mutateAsync(invite.id); toast('Invitation revoked') }} className="text-[12.5px] font-semibold text-danger">Revoke</button>
+          </div>
+        ))}
+        {creating ? (
+          <div className="flex items-center gap-2 border-t border-divider px-3.5 py-3">
+            <input autoFocus placeholder="Name (optional)" value={label} onChange={(e) => setLabel(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} className="flex-1 rounded-[9px] border border-line2 bg-cream px-3 py-2 text-[13.5px] outline-none focus:border-terracotta" />
+            <Button className="px-3.5 py-2 text-[13px]" onClick={submit} disabled={create.isPending}>{create.isPending ? '…' : 'Create'}</Button>
+            <Button variant="ghost" className="px-2 py-2 text-[13px]" onClick={() => setCreating(false)}>Cancel</Button>
+          </div>
+        ) : (
+          <button onClick={() => setCreating(true)} className="w-full border-t border-divider px-3.5 py-3 text-left text-[13.5px] font-semibold text-terracotta">＋ Create invitation</button>
+        )}
+      </div>
+      {created && <SecretModal title="Invitation created" blurb={<>Copy this link now — <b>you won't be able to see it again.</b></>} secret={inviteUrl} copyLabel="invite link" onClose={() => setCreated(null)} />}
+    </Section>
   )
 }

@@ -65,6 +65,8 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Incremented after password changes or resets to invalidate existing JWTs.
+    auth_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
 
     settings: Mapped[UserSettings | None] = relationship(
@@ -78,6 +80,9 @@ class User(Base):
     plans: Mapped[list[Plan]] = relationship(back_populates="user", cascade="all, delete-orphan")
     orders: Mapped[list[Order]] = relationship(back_populates="user", cascade="all, delete-orphan")
     product_memory: Mapped[list[ProductMemory]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    invitations_created: Mapped[list[Invitation]] = relationship(
+        back_populates="created_by", foreign_keys="Invitation.created_by_user_id"
+    )
 
 
 class UserSettings(Base):
@@ -301,3 +306,22 @@ class ApiToken(Base):
     @property
     def is_active(self) -> bool:
         return self.revoked_at is None
+
+
+class Invitation(Base):
+    """Single-use admin-created registration capability; only its hash is stored."""
+
+    __tablename__ = "invitations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    recipient_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_by_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    redeemed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    created_by: Mapped[User] = relationship(back_populates="invitations_created", foreign_keys=[created_by_user_id])

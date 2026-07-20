@@ -73,6 +73,7 @@ async def change_password(payload: PasswordChange, user: CurrentUser, session: S
     if not verify_password(payload.current_password, user.password_hash):
         raise PermissionError_("Current password is incorrect.", code="invalid_current_password")
     user.password_hash = hash_password(payload.new_password)
+    user.auth_version += 1
     await session.commit()
 
 

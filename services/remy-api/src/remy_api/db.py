@@ -98,6 +98,7 @@ def _apply_additive_migrations(conn) -> None:  # noqa: ANN001
     additions = [
         ("user_settings", "store_chain", "VARCHAR(64)"),
         ("users", "is_admin", "BOOLEAN NOT NULL DEFAULT 0"),
+        ("users", "auth_version", "INTEGER NOT NULL DEFAULT 0"),
     ]
     for table, column, ddl_type in additions:
         if table not in tables:

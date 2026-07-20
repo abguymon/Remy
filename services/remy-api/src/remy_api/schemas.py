@@ -21,6 +21,12 @@ class TokenResponse(BaseModel):
     expires_in: int  # seconds
 
 
+class InvitationRegister(BaseModel):
+    username: str = Field(min_length=3, max_length=255)
+    password: str = Field(min_length=12, max_length=1024)
+    invitation_token: str = Field(min_length=32, max_length=512)
+
+
 class UserProfile(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -63,6 +69,28 @@ class TempPasswordResponse(BaseModel):
     temp_password: str
 
 
+class InvitationCreate(BaseModel):
+    recipient_label: str | None = Field(default=None, max_length=255)
+    expires_in_days: int = Field(default=7, ge=1, le=30)
+
+
+class InvitationInfo(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    recipient_label: str | None
+    created_at: datetime
+    expires_at: datetime
+    redeemed_at: datetime | None
+    revoked_at: datetime | None
+
+
+class InvitationCreated(InvitationInfo):
+    """The raw token is returned once and is never persisted."""
+
+    invitation_token: str
+
+
 class SettingsResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -98,7 +126,7 @@ class PasswordChange(BaseModel):
 
     current_password: str = Field(min_length=1)
     # Minimal sanity floor — a too-short new password is a 422 before any hashing.
-    new_password: str = Field(min_length=8, max_length=1024)
+    new_password: str = Field(min_length=12, max_length=1024)
 
 
 class ApiTokenCreate(BaseModel):
