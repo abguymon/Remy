@@ -26,6 +26,7 @@ from remy_api.llm.errors import (
     LLMValidationError,
 )
 from remy_api.llm.prompt import RenderedPrompt
+from remy_api.observability import observe_generation
 from remy_api.providers.settings import ProviderSettings, get_provider_settings
 
 logger = logging.getLogger(__name__)
@@ -59,7 +60,7 @@ class LLMClient:
             {"role": "user", "content": self._user_content(prompt)},
         ]
 
-        raw = await self._complete(messages, prompt.temperature, schema)
+        raw = await self._complete(messages, prompt.temperature, schema, prompt)
         try:
             return self._parse(raw, schema)
         except (json.JSONDecodeError, ValidationError) as first_err:
@@ -85,7 +86,7 @@ class LLMClient:
                 ),
             }
         )
-        raw_retry = await self._complete(messages, prompt.temperature, schema)
+        raw_retry = await self._complete(messages, prompt.temperature, schema, prompt)
         try:
             return self._parse(raw_retry, schema)
         except (json.JSONDecodeError, ValidationError) as second_err:
@@ -118,6 +119,7 @@ class LLMClient:
         messages: list[dict[str, Any]],
         temperature: float,
         schema: type[BaseModel],
+        prompt: RenderedPrompt,
     ) -> str:
         kwargs: dict = {
             "model": self._settings.llm_model,
@@ -136,7 +138,15 @@ class LLMClient:
             pass
 
         try:
-            response = await litellm.acompletion(**kwargs)
+            response = await observe_generation(
+                lambda: litellm.acompletion(**kwargs),
+                name=prompt.prompt_id,
+                version=prompt.version,
+                model=self._settings.llm_model,
+                model_parameters={"temperature": temperature},
+                input=messages,
+                tags=["structured-generation"],
+            )
         except Exception as exc:  # noqa: BLE001 - normalize any provider/transport error
             raise LLMAPIError(f"LLM provider call failed ({self._settings.llm_model}): {exc}") from exc
 

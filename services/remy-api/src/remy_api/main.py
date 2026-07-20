@@ -20,6 +20,7 @@ from remy_api.db import dispose_engine, init_db
 from remy_api.errors import register_error_handlers
 from remy_api.kroger import close_client, register_kroger_error_handler
 from remy_api.llm.errors import LLMError
+from remy_api.observability import shutdown_langfuse
 from remy_api.routers import admin, auth, kroger, orders, plan, recipes, users
 from remy_api.search.base import SearchError
 
@@ -41,6 +42,7 @@ async def lifespan(app_: FastAPI) -> AsyncIterator[None]:
             await stack.enter_async_context(mcp_ctx)
         yield
     await close_client()
+    shutdown_langfuse()
     await dispose_engine()
 
 

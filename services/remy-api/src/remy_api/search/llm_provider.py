@@ -18,6 +18,7 @@ import logging
 
 import litellm
 
+from remy_api.observability import observe_generation
 from remy_api.search.base import (
     SearchConfigError,
     SearchProviderError,
@@ -111,7 +112,16 @@ class LLMSearchProvider:
         prompt = f"Find up to {max_results} web pages for: {q}"
 
         try:
-            response = await litellm.acompletion(**self._build_kwargs(prompt))
+            kwargs = self._build_kwargs(prompt)
+            response = await observe_generation(
+                lambda: litellm.acompletion(**kwargs),
+                name="web_search",
+                version=1,
+                model=kwargs["model"],
+                model_parameters={"max_results": max_results, "provider": self._provider},
+                input=kwargs["messages"],
+                tags=["web-search"],
+            )
         except litellm.Timeout as exc:  # type: ignore[attr-defined]
             raise SearchTimeoutError(f"LLM search timed out after {self._timeout}s") from exc
         except Exception as exc:  # noqa: BLE001 - normalize provider/transport errors
