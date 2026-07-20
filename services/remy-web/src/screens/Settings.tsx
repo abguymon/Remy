@@ -891,7 +891,7 @@ function SecretModal({
 
   return (
     <div
-      className="absolute inset-0 z-30 flex animate-pop items-center justify-center p-6"
+      className="fixed inset-0 z-30 flex animate-pop items-center justify-center p-6"
       style={{ background: 'rgba(40,30,20,.4)' }}
       onClick={onClose}
     >

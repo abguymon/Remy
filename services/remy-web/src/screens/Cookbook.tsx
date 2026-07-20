@@ -134,7 +134,7 @@ function AddRecipeSheet({
 
   return (
     <div
-      className="absolute inset-0 z-30 flex animate-pop items-end justify-center sm:items-center"
+      className="fixed inset-0 z-30 flex animate-pop items-end justify-center sm:items-center"
       style={{ background: 'rgba(40,30,20,.4)' }}
       onClick={() => {
         if (!busy.current) onClose()
