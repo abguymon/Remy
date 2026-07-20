@@ -7,6 +7,8 @@ import { api } from './api'
 import type {
   AdminUserCreated,
   AdminUserInfo,
+  InvitationCreated,
+  InvitationInfo,
   ApiTokenCreated,
   ApiTokenInfo,
   CartEdit,
@@ -391,5 +393,41 @@ export function useSetUserActive() {
     mutationFn: ({ id, active }: { id: string; active: boolean }) =>
       api.post<AdminUserInfo>(`/admin/users/${id}/${active ? 'activate' : 'deactivate'}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: adminUsersKey }),
+  })
+}
+
+// --- admin: invitations -----------------------------------------------------
+
+const invitationsKey = ["admin", "invitations"] as const
+
+export function useInvitations(enabled: boolean) {
+  return useQuery({
+    queryKey: invitationsKey,
+    queryFn: () => api.get<InvitationInfo[]>("/admin/invitations"),
+    enabled,
+  })
+}
+
+export function useCreateInvitation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { recipient_label?: string; expires_in_days?: number }) =>
+      api.post<InvitationCreated>("/admin/invitations", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: invitationsKey }),
+  })
+}
+
+export function useRevokeInvitation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.post<void>("/admin/invitations/" + id + "/revoke"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: invitationsKey }),
+  })
+}
+
+export function useRegisterWithInvitation() {
+  return useMutation({
+    mutationFn: (body: { username: string; password: string; invitation_token: string }) =>
+      api.post<UserProfile>("/auth/register", body),
   })
 }

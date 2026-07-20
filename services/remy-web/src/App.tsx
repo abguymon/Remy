@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import AppShell from './components/AppShell'
 import Login from './screens/Login'
+import Join from './screens/Join'
 import Cookbook from './screens/Cookbook'
 import RecipeDetail from './screens/RecipeDetail'
 import CartRecord from './screens/CartRecord'
@@ -22,6 +23,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/join" element={<Join />} />
       <Route
         element={
           <RequireAuth>

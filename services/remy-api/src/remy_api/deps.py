@@ -47,10 +47,12 @@ async def _user_from_api_token(session: AsyncSession, token: str) -> User:
 
 
 async def _user_from_jwt(session: AsyncSession, token: str) -> User:
-    user_id = decode_access_token(token)
+    user_id, auth_version = decode_access_token(token)
     user = await session.get(User, user_id)
     if user is None:
         raise AuthenticationError("User no longer exists.")
+    if user.auth_version != auth_version:
+        raise AuthenticationError("Your session has been invalidated. Please sign in again.")
     return user
 
 

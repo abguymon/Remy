@@ -43,19 +43,20 @@ def verify_password(password: str, password_hash: str) -> bool:
 # --- JWT (web) ---------------------------------------------------------------
 
 
-def create_access_token(user_id: str) -> str:
+def create_access_token(user_id: str, auth_version: int = 0) -> str:
     settings = get_settings()
     now = datetime.now(UTC)
     payload = {
         "sub": user_id,
+        "av": auth_version,
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(hours=settings.jwt_expire_hours)).timestamp()),
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
-def decode_access_token(token: str) -> str:
-    """Return the ``sub`` (user id) from a valid token, else raise 401."""
+def decode_access_token(token: str) -> tuple[str, int]:
+    """Return the user id and session version from a valid token, else raise 401."""
     settings = get_settings()
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
@@ -64,9 +65,23 @@ def decode_access_token(token: str) -> str:
     except jwt.PyJWTError as exc:
         raise AuthenticationError("Invalid authentication token.") from exc
     sub = payload.get("sub")
-    if not sub:
+    auth_version = payload.get("av", 0)
+    if not sub or not isinstance(auth_version, int):
         raise AuthenticationError("Invalid authentication token.")
-    return str(sub)
+    return str(sub), auth_version
+
+
+# --- Invitations ------------------------------------------------------------
+
+
+def generate_invitation_token() -> tuple[str, str]:
+    """Return a high-entropy invitation capability and its stored digest."""
+    token = secrets.token_urlsafe(32)
+    return token, hash_invitation_token(token)
+
+
+def hash_invitation_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
 
 
 # --- API tokens (MCP) --------------------------------------------------------
