@@ -102,6 +102,17 @@ suite at ~6% of `gpt-4o`'s price. To vet any model:
 > maps the model to its `*-search-preview` variant (e.g. `gpt-4o` →
 > `gpt-4o-search-preview`), since the base models reject `web_search_options`.
 
+**Langfuse Cloud (optional).** Create a project in the
+[Langfuse US Cloud](https://us.cloud.langfuse.com), copy its public and secret
+keys, then set `LANGFUSE_ENABLED=true`, `LANGFUSE_PUBLIC_KEY`, and
+`LANGFUSE_SECRET_KEY`. Set `LANGFUSE_BASE_URL` to another Cloud region if needed.
+Remy records every physical LLM generation with its model, latency, token usage,
+cost, prompt name/version, opaque user id, and plan id (as the Langfuse session),
+including background discovery and product-matching work. Prompt and response
+content is excluded by default; opt in with `LANGFUSE_CAPTURE_CONTENT=true` only
+if storing that household data in Langfuse is acceptable. Telemetry export is
+failure-isolated and cannot turn a successful Remy request into an error.
+
 **Search.** `SEARCH_PROVIDER` is one of:
 
 - `searxng` (**default, recommended**) — a self-hosted [SearXNG](https://docs.searxng.org/)

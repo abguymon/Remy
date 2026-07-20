@@ -16,6 +16,7 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from remy_api import memory
 from remy_api.kroger.banners import banner_cart_url
 from remy_api.kroger.errors import KrogerNotConnectedError
 from remy_api.kroger.models import OutcomeStatus
@@ -69,6 +70,18 @@ async def execute_plan(session: AsyncSession, plan: Plan) -> None:
                 ItemStatus.STOCK_UNKNOWN: "stock_unknown",
             }.get(it.status, "added")
             reason = None
+            # Purchase memory: remember this product for its search term so it can
+            # win the match short-circuit next time (FR-13, post-launch usuals).
+            await memory.record_ordered(
+                session,
+                plan.user_id,
+                search_term=it.search_term,
+                upc=it.chosen.upc,
+                description=it.chosen.description,
+                size=it.chosen.size,
+                image_url=it.chosen.image_url,
+                price=it.chosen.price,
+            )
         else:
             any_failed = True
             status = "failed"

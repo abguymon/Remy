@@ -76,6 +76,16 @@ class Settings(BaseSettings):
     llm_timeout: float = 60.0
     llm_max_retries: int = 0  # transport retries; validation retry is separate
 
+    # --- Langfuse Cloud observability (optional) ---
+    langfuse_enabled: bool = False
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_base_url: str = "https://us.cloud.langfuse.com"
+    langfuse_environment: str = "production"
+    # Cost/token metadata is always traced when enabled. Prompt and response
+    # content may contain personal data and requires an explicit opt-in.
+    langfuse_capture_content: bool = False
+
     # --- Web search ---
     search_provider: str = "brave"  # brave | llm | searxng
     search_api_key: str = ""

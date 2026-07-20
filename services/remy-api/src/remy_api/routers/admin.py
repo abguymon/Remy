@@ -72,9 +72,7 @@ async def list_users(_admin: AdminUser, session: SessionDep) -> list[AdminUserIn
 
 
 @router.post("/users", response_model=AdminUserCreated, status_code=status.HTTP_201_CREATED)
-async def create_user_endpoint(
-    payload: AdminUserCreate, _admin: AdminUser, session: SessionDep
-) -> AdminUserCreated:
+async def create_user_endpoint(payload: AdminUserCreate, _admin: AdminUser, session: SessionDep) -> AdminUserCreated:
     # Reuses the CLI/bootstrap create-user code path (user + seeded settings).
     temp_password = _temp_password()
     user = await create_user(session, payload.username, temp_password)

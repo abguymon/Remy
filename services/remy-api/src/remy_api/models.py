@@ -77,6 +77,7 @@ class User(Base):
     recipes: Mapped[list[Recipe]] = relationship(back_populates="user", cascade="all, delete-orphan")
     plans: Mapped[list[Plan]] = relationship(back_populates="user", cascade="all, delete-orphan")
     orders: Mapped[list[Order]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    product_memory: Mapped[list[ProductMemory]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
 
 class UserSettings(Base):
@@ -238,6 +239,46 @@ class Order(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
 
     user: Mapped[User] = relationship(back_populates="orders")
+
+
+class ProductMemory(Base):
+    """Remembered Kroger products per user — the "usuals" store (post-launch).
+
+    One row per (user, ``food_key``, ``upc``): a product a user has ordered,
+    swapped to, pinned, or imported for a given ingredient/search term. Drives
+    the matching short-circuit (skip P5 ranking when a known product is in stock)
+    and the Settings "Usuals" list / cart-review strip. ``food_key`` is the
+    lowercased search-term/ingredient string this product answers, so the same
+    UPC can be a usual for several foods.
+    """
+
+    __tablename__ = "product_memory"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # Lowercased search-term / ingredient string this product is remembered for.
+    food_key: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    upc: Mapped[str] = mapped_column(String(64), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    size: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    image_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    last_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    times_ordered: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_ordered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # ``preferred`` wins the match short-circuit outright (set on swap / pin).
+    preferred: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # ``hidden`` rows are kept for history but excluded from usuals + matching.
+    hidden: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # How this memory was created: 'order' | 'swap' | 'pinned' | 'import'.
+    source: Mapped[str] = mapped_column(String(16), nullable=False, default="order")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
+
+    user: Mapped[User] = relationship(back_populates="product_memory")
+
+    __table_args__ = (UniqueConstraint("user_id", "food_key", "upc", name="uq_product_memory_user_food_upc"),)
 
 
 class ApiToken(Base):

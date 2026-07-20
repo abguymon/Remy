@@ -23,15 +23,33 @@ export function Button({
   variant = 'primary',
   className = '',
   children,
+  busy = false,
+  busyLabel,
+  disabled,
   ...rest
 }: {
   variant?: ButtonVariant
   className?: string
   children: ReactNode
+  busy?: boolean
+  busyLabel?: ReactNode
 } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  const spinnerClass =
+    variant === 'primary'
+      ? '!border-white/40 !border-t-white'
+      : variant === 'danger'
+        ? '!border-danger-border !border-t-danger'
+        : ''
+
   return (
-    <button className={`${buttonBase} ${buttonVariants[variant]} ${className}`} {...rest}>
-      {children}
+    <button
+      className={`${buttonBase} ${buttonVariants[variant]} ${className}`}
+      disabled={disabled || busy}
+      aria-busy={busy || undefined}
+      {...rest}
+    >
+      {busy && <Spinner className={spinnerClass} />}
+      {busy && busyLabel !== undefined ? busyLabel : children}
     </button>
   )
 }
@@ -325,7 +343,7 @@ export function ConfirmDialog({
   if (!open) return null
   return (
     <div
-      className="absolute inset-0 z-30 flex animate-pop items-center justify-center p-6"
+      className="fixed inset-0 z-30 flex animate-pop items-center justify-center p-6"
       style={{ background: 'rgba(40,30,20,.4)' }}
       onClick={onCancel}
     >
@@ -355,15 +373,27 @@ export function ConfirmDialog({
 // --- Toast host ------------------------------------------------------------
 
 export function ToastHost() {
-  const { message, dismiss } = useToast()
+  const { message, action, dismiss } = useToast()
   if (!message) return null
   return (
     <div
-      onClick={dismiss}
-      className="absolute bottom-24 left-1/2 z-20 -translate-x-1/2 animate-pop cursor-pointer whitespace-nowrap rounded-xl bg-ink px-4 py-2.5 text-[13px] font-medium text-cream shadow-toast"
+      className="absolute bottom-24 left-1/2 z-20 flex -translate-x-1/2 animate-pop items-center gap-3 whitespace-nowrap rounded-xl bg-ink px-4 py-2.5 text-[13px] font-medium text-cream shadow-toast"
       role="status"
     >
-      {message}
+      <span className="cursor-pointer" onClick={dismiss}>
+        {message}
+      </span>
+      {action && (
+        <button
+          onClick={() => {
+            action.run()
+            dismiss()
+          }}
+          className="flex-none font-bold text-[#E4B8A6]"
+        >
+          {action.label}
+        </button>
+      )}
     </div>
   )
 }

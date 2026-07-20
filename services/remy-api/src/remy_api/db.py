@@ -92,7 +92,9 @@ def _apply_additive_migrations(conn) -> None:  # noqa: ANN001
 
     inspector = inspect(conn)
     tables = set(inspector.get_table_names())
-    # (table, column, DDL type) additive migrations.
+    # (table, column, DDL type) additive migrations. Note: a *new table* (e.g.
+    # ``product_memory``) needs no entry here — ``create_all`` creates missing
+    # tables on an existing DB; only new columns on pre-existing tables do.
     additions = [
         ("user_settings", "store_chain", "VARCHAR(64)"),
         ("users", "is_admin", "BOOLEAN NOT NULL DEFAULT 0"),

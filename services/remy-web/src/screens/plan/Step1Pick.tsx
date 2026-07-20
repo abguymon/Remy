@@ -149,6 +149,7 @@ export default function Step1Pick({
       <StickyBar>
         <Button
           className="w-full py-3.5 text-[15.5px] font-bold"
+          busy={submit.isPending}
           disabled={!canContinue}
           onClick={onContinue}
         >

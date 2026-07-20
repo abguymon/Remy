@@ -13,6 +13,7 @@ scoping as the web session. Failures raise typed 401/403 errors (never silent).
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -24,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from remy_api.db import get_session
 from remy_api.errors import AuthenticationError, PermissionError_
 from remy_api.models import ApiToken, User
+from remy_api.observability import bind_observation_context
 from remy_api.security import decode_access_token, hash_api_token, looks_like_api_token
 
 # auto_error=False so a missing header yields our typed 401, not FastAPI's 403.
@@ -85,10 +87,12 @@ async def resolve_api_token_user(session: AsyncSession, token: str) -> User:
 async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> User:
+) -> AsyncIterator[User]:
     if credentials is None or not credentials.credentials:
         raise AuthenticationError("Missing bearer token.")
-    return await resolve_bearer_user(session, credentials.credentials)
+    user = await resolve_bearer_user(session, credentials.credentials)
+    with bind_observation_context(user_id=user.id):
+        yield user
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]

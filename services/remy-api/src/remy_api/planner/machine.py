@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from remy_api.errors import ConflictError, NotFoundError
 from remy_api.models import Plan, PlanStatus, User, UserSettings
+from remy_api.observability import bind_observation_context
 from remy_api.planner import deps, discover, execute, listing, matching, select_step
 from remy_api.planner.schemas import (
     CartState,
@@ -58,12 +59,13 @@ def _lock(user_id: str) -> asyncio.Lock:
     return lock
 
 
-def _launch(user_id: str, coro) -> None:  # noqa: ANN001
+def _launch(user_id: str, session_id: str, coro) -> None:  # noqa: ANN001
     """Run ``coro`` as a detached background task, one per user."""
 
     async def _runner() -> None:
         try:
-            await coro
+            with bind_observation_context(user_id=user_id, session_id=session_id):
+                await coro
         except Exception:  # noqa: BLE001 - background failures are logged, never crash the loop
             logger.exception("background step failed for user %s", user_id)
 
@@ -134,7 +136,9 @@ async def create_plan(session: AsyncSession, user: User, text: str) -> Plan:
                 code="plan_active",
             )
 
-        meals = await _extract_meals(text)
+        plan_id = active.id if active is not None else str(uuid.uuid4())
+        with bind_observation_context(user_id=user.id, session_id=plan_id):
+            meals = await _extract_meals(text)
         meals_json = [m.model_dump(mode="json") for m in meals]
 
         if active is not None:  # re-seed the needs-input plan in place
@@ -147,14 +151,14 @@ async def create_plan(session: AsyncSession, user: User, text: str) -> Plan:
             plan.execution_results = None
             plan.status = PlanStatus.DISCOVERING
         else:
-            plan = Plan(user_id=user.id, status=PlanStatus.DISCOVERING, meals=meals_json)
+            plan = Plan(id=plan_id, user_id=user.id, status=PlanStatus.DISCOVERING, meals=meals_json)
             session.add(plan)
         await session.commit()
         await session.refresh(plan)
         plan_id = plan.id
 
     if meals:
-        _launch(user.id, discover.run_discover(plan_id))
+        _launch(user.id, plan_id, discover.run_discover(plan_id))
     return plan
 
 
@@ -165,7 +169,8 @@ async def submit_selection(session: AsyncSession, user: User, choices: list) -> 
     async with _lock(user.id):
         plan = await _require_active(session, user.id)
         _require_status(plan, PlanStatus.SELECTING)
-        await select_step.process_select(session, plan, choices)
+        with bind_observation_context(user_id=plan.user_id, session_id=plan.id):
+            await select_step.process_select(session, plan, choices)
         await session.refresh(plan)
         return plan
 
@@ -177,7 +182,8 @@ async def list_edits(session: AsyncSession, user: User, ops: list) -> Plan:
     async with _lock(user.id):
         plan = await _require_active(session, user.id)
         _require_status(plan, PlanStatus.REVIEWING_LIST)
-        await listing.apply_list_edits(plan, ops)
+        with bind_observation_context(user_id=plan.user_id, session_id=plan.id):
+            await listing.apply_list_edits(plan, ops)
         await session.commit()
         await session.refresh(plan)
         return plan
@@ -202,7 +208,7 @@ async def approve_list(session: AsyncSession, user: User) -> Plan:
         plan.matches = CartState(status=MatchStage.MATCHING, cart_draft_id=uuid.uuid4().hex).model_dump(mode="json")
         await session.commit()
         plan_id = plan.id
-    _launch(user.id, matching.run_match(plan_id))
+    _launch(user.id, plan_id, matching.run_match(plan_id))
     return await session.get(Plan, plan_id)
 
 
@@ -270,7 +276,8 @@ async def _retry_meal(session: AsyncSession, plan: Plan, meal_id: str) -> None:
         await session.execute(select(UserSettings).where(UserSettings.user_id == plan.user_id))
     ).scalar_one_or_none()
     favorite_sites = list(settings.favorite_sites) if settings else []
-    mc = await discover.discover_meal(Meal(**meal_dict), favorite_sites, plan.user_id)
+    with bind_observation_context(user_id=plan.user_id, session_id=plan.id):
+        mc = await discover.discover_meal(Meal(**meal_dict), favorite_sites, plan.user_id)
     current = dict(plan.candidates or {})
     current[meal_id] = mc.model_dump(mode="json")
     plan.candidates = current
@@ -293,7 +300,8 @@ async def _retry_item(session: AsyncSession, plan: Plan, item_id: str) -> None:
         item.status = ItemStatus.MATCHING
         item.chosen = None
         item.alternatives = []
-        await matching._match_one(item, location_id, fulfillment)
+        with bind_observation_context(user_id=plan.user_id, session_id=plan.id):
+            await matching._match_one(item, location_id, fulfillment)
         cart.items = [item if it.id == item.id else it for it in cart.items]
         cart.estimated_total = matching._estimated_total(cart.items)
         plan.matches = cart.model_dump(mode="json")

@@ -18,6 +18,7 @@ from remy_api.db import get_session_factory
 from remy_api.deps import resolve_api_token_user
 from remy_api.errors import APIError
 from remy_api.mcp_facade.context import reset_current_user_id, set_current_user_id
+from remy_api.observability import bind_observation_context
 
 Scope = dict
 Receive = Callable[[], Awaitable[dict]]
@@ -70,6 +71,7 @@ class MCPAuthMiddleware:
 
         ctx_token = set_current_user_id(user_id)
         try:
-            await self.app(scope, receive, send)
+            with bind_observation_context(user_id=user_id):
+                await self.app(scope, receive, send)
         finally:
             reset_current_user_id(ctx_token)

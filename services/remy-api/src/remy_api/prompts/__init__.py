@@ -20,6 +20,7 @@ from remy_api.prompts import (
     meal_extraction,
     product_extraction,
     product_ranking,
+    receipt_items,
     recipe_from_images,
     saved_recipe_relevance,
 )
@@ -35,5 +36,6 @@ __all__ = [
     "ingredient_parsing",
     "product_extraction",
     "product_ranking",
+    "receipt_items",
     "recipe_from_images",
 ]

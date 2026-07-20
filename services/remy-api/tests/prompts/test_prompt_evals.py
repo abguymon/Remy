@@ -18,6 +18,7 @@ from remy_api.prompts import (
     meal_extraction,
     product_extraction,
     product_ranking,
+    receipt_items,
     recipe_from_images,
     saved_recipe_relevance,
 )
@@ -347,3 +348,56 @@ async def test_vision_reports_not_found_for_non_recipe(llm_client):
         LLMRecipeExtraction,
     )
     assert out.found is False
+
+
+# --- receipt_items (multimodal + text) ----------------------------------------
+
+
+async def test_receipt_image_extracts_items_and_skips_totals(llm_client):
+    """A rendered receipt image: exact item extraction, TOTAL/TAX lines excluded."""
+    lines = [
+        "FRESH MART GROCERY",
+        "123 Main St",
+        "",
+        "WHOLE MILK          3.49",
+        "LARGE EGGS          2.99",
+        "BANANAS             1.29",
+        "SOURDOUGH BREAD     4.50",
+        "",
+        "SUBTOTAL           12.27",
+        "TAX                 0.98",
+        "TOTAL              13.25",
+        "VISA               13.25",
+        "Thank you!",
+    ]
+    img = _synthetic_recipe_image(lines)
+    out = await llm_client.structured(
+        receipt_items.render(receipt_items.ReceiptItemsInput(images=[img])),
+        receipt_items.ReceiptItemsOutput,
+    )
+    assert out.found_items is True
+    names = " ".join(i.name.lower() for i in out.items)
+    assert "milk" in names and "egg" in names and "banana" in names and "bread" in names
+    # totals / tax / subtotal / payment lines are NOT items
+    assert not any("total" in i.name.lower() or "tax" in i.name.lower() or "visa" in i.name.lower() for i in out.items)
+    assert len(out.items) == 4
+
+
+async def test_receipt_text_order_history_parses_items(llm_client):
+    text = (
+        "Your past orders\n"
+        "Kroger Whole Milk 1 gal - $3.49\n"
+        "Large Grade A Eggs 12 ct - $2.99\n"
+        "Organic Bananas - $1.29\n"
+        "Subtotal: $7.77\n"
+        "Tax: $0.62\n"
+        "Order total: $8.39\n"
+    )
+    out = await llm_client.structured(
+        receipt_items.render(receipt_items.ReceiptItemsInput(text=text)),
+        receipt_items.ReceiptItemsOutput,
+    )
+    assert out.found_items is True
+    names = " ".join(i.name.lower() for i in out.items)
+    assert "milk" in names and "egg" in names and "banana" in names
+    assert not any("total" in i.name.lower() or "subtotal" in i.name.lower() for i in out.items)
