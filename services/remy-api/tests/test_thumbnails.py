@@ -55,6 +55,17 @@ async def test_fetch_og_image_success(monkeypatch):
     assert await _fetch(monkeypatch, handler) == "https://cdn.example.com/pic.jpg"
 
 
+async def test_fetch_finds_og_image_after_200kb(monkeypatch):
+    """Large injected head assets must not hide otherwise valid social metadata."""
+    late_image = b'<meta property="og:image" content="https://cdn.example.com/late.jpg">'
+    html = b"<html><head>" + (b"x" * 225_000) + late_image + b"</head><body>recipe</body></html>"
+
+    def handler(request):
+        return httpx.Response(200, content=html, headers={"content-type": "text/html"})
+
+    assert await _fetch(monkeypatch, handler) == "https://cdn.example.com/late.jpg"
+
+
 async def test_fetch_returns_none_on_404(monkeypatch):
     def handler(request):
         return httpx.Response(404, text="nope")
