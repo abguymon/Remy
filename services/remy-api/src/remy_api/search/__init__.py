@@ -12,7 +12,12 @@ from remy_api.search.brave import BraveSearchProvider
 from remy_api.search.factory import get_search_provider
 from remy_api.search.llm_provider import LLMSearchProvider
 from remy_api.search.searxng import SearxngSearchProvider
-from remy_api.search.thumbnails import fetch_og_image, fetch_thumbnails
+from remy_api.search.thumbnails import (
+    cache_thumbnail_images,
+    fetch_og_image,
+    fetch_thumbnails,
+    thumbnail_cache_path,
+)
 
 __all__ = [
     "SearchResult",
@@ -26,5 +31,7 @@ __all__ = [
     "SearxngSearchProvider",
     "get_search_provider",
     "fetch_og_image",
+    "cache_thumbnail_images",
+    "thumbnail_cache_path",
     "fetch_thumbnails",
 ]

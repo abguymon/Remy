@@ -10,12 +10,14 @@ concurrency across a batch.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 
 import httpx
 from selectolax.parser import HTMLParser
 
 from remy_api.net import BLOCKED_STATUSES, impersonated_get
+from remy_api.recipes.images import download_recipe_image, image_path_for
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +27,9 @@ logger = logging.getLogger(__name__)
 _MAX_HEAD_BYTES = 1_000_000
 _TIMEOUT = 5.0
 _CONCURRENCY = 8
+_CACHE_PREFIX = "search-thumbnail-"
+_CACHE_ROUTE = "/plan/thumbnails"
+
 _HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -139,4 +144,48 @@ async def fetch_thumbnails(urls: list[str], concurrency: int = _CONCURRENCY) -> 
 
         pairs = await asyncio.gather(*(_one(u) for u in unique))
 
+    return dict(pairs)
+
+
+def thumbnail_cache_key(image_url: str) -> str:
+    """Stable opaque key for a public search-result image URL."""
+    return hashlib.sha256(image_url.encode("utf-8")).hexdigest()
+
+
+def thumbnail_cache_path(cache_key: str):
+    """Path for a cached search thumbnail under the existing image volume."""
+    return image_path_for(f"{_CACHE_PREFIX}{cache_key}")
+
+
+async def cache_thumbnail_images(image_urls: list[str], concurrency: int = _CONCURRENCY) -> dict[str, str | None]:
+    """Download/re-encode external thumbnails and return same-origin API paths.
+
+    Browsers never hotlink these images: discovery stores the returned local
+    path, and the authenticated thumbnail route serves the JPEG from Remy's data
+    volume. Failures remain cosmetic and map to ``None``.
+    """
+    unique = list(
+        dict.fromkeys(
+            url.strip() for url in image_urls if url and url.strip().lower().startswith(("https://", "http://"))
+        )
+    )
+    if not unique:
+        return {}
+
+    sem = asyncio.Semaphore(concurrency)
+    async with httpx.AsyncClient(follow_redirects=True, timeout=_TIMEOUT) as client:
+
+        async def _one(url: str) -> tuple[str, str | None]:
+            cache_key = thumbnail_cache_key(url)
+            dest = thumbnail_cache_path(cache_key)
+            if not dest.is_file():
+                async with sem:
+                    stored = await download_recipe_image(
+                        f"{_CACHE_PREFIX}{cache_key}", url, client=client, headers=_HEADERS
+                    )
+                if stored is None:
+                    return url, None
+            return url, f"{_CACHE_ROUTE}/{cache_key}"
+
+        pairs = await asyncio.gather(*(_one(url) for url in unique))
     return dict(pairs)

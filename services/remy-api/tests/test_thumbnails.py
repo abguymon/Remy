@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
-import httpx
+import io
 
+import httpx
+from PIL import Image
+
+from remy_api.db import get_session_factory
+from remy_api.recipes.images import store_image_bytes
 from remy_api.search import thumbnails
+from remy_api.user_service import create_user
 
 _HTML_OG = """
 <html><head>
@@ -146,3 +152,48 @@ async def test_fetch_og_image_curl_failure_returns_none(monkeypatch):
         return httpx.Response(403, text="blocked")
 
     assert await _fetch(monkeypatch, handler) is None
+
+
+def _png_bytes() -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGB", (320, 240), (180, 80, 40)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+async def test_cache_thumbnail_images_downloads_and_returns_local_path(monkeypatch):
+    source_url = "https://img.example/cache-source.png"
+
+    def handler(request):
+        return httpx.Response(200, content=_png_bytes(), headers={"content-type": "image/png"})
+
+    transport = httpx.MockTransport(handler)
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        "remy_api.search.thumbnails.httpx.AsyncClient",
+        lambda *a, **k: real_client(*a, transport=transport, **k),
+    )
+
+    result = await thumbnails.cache_thumbnail_images([source_url, source_url])
+    cache_key = thumbnails.thumbnail_cache_key(source_url)
+
+    assert result == {source_url: f"/plan/thumbnails/{cache_key}"}
+    assert thumbnails.thumbnail_cache_path(cache_key).is_file()
+
+
+async def test_cached_thumbnail_route_requires_auth_and_serves_jpeg(client):
+    cache_key = "b" * 64
+    assert store_image_bytes(f"search-thumbnail-{cache_key}", _png_bytes()) is not None
+
+    unauthenticated = await client.get(f"/plan/thumbnails/{cache_key}")
+    assert unauthenticated.status_code == 401
+
+    factory = get_session_factory()
+    async with factory() as session:
+        await create_user(session, "thumbnail-owner", "sup3r-secret-pw")
+    login = await client.post("/auth/login", json={"username": "thumbnail-owner", "password": "sup3r-secret-pw"})
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    response = await client.get(f"/plan/thumbnails/{cache_key}", headers=headers)
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/jpeg"
+    assert response.headers["cache-control"] == "private, max-age=86400"

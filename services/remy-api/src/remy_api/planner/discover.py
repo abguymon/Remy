@@ -234,6 +234,25 @@ async def _discover_web(meal: Meal, favorite_sites: list[str]) -> list[Candidate
 # --- per-meal orchestration --------------------------------------------------
 
 
+async def _cache_candidate_thumbnails(candidates: list[Candidate]) -> None:
+    """Replace external thumbnail URLs with authenticated same-origin paths."""
+    external_urls = [
+        candidate.thumbnail
+        for candidate in candidates
+        if candidate.thumbnail and candidate.thumbnail.startswith(("https://", "http://"))
+    ]
+    if not external_urls:
+        return
+    try:
+        cached = await deps.cache_thumbnail_images(external_urls)
+    except Exception as exc:  # noqa: BLE001 - thumbnails are cosmetic
+        logger.debug("thumbnail cache failed: %s", exc)
+        cached = {}
+    for candidate in candidates:
+        if candidate.thumbnail in external_urls:
+            candidate.thumbnail = cached.get(candidate.thumbnail)
+
+
 async def discover_meal(meal: Meal, favorite_sites: list[str], user_id: str) -> MealCandidates:
     """Discover candidates for one meal, tolerating single-source failures."""
     if meal.url:
@@ -243,20 +262,22 @@ async def discover_meal(meal: Meal, favorite_sites: list[str], user_id: str) -> 
             thumbs = await deps.fetch_thumbnails([meal.url])
         except Exception:  # noqa: BLE001 - thumbnails are cosmetic
             thumbs = {}
+        candidates = [
+            Candidate(
+                id="url:0",
+                title=meal.verbatim or meal.url,
+                source_domain=_domain(meal.url),
+                url=meal.url,
+                thumbnail=thumbs.get(meal.url),
+                origin=Origin.WEB,
+                preselected=True,
+            )
+        ]
+        await _cache_candidate_thumbnails(candidates)
         return MealCandidates(
             meal_id=meal.id,
             status=MealStatus.READY,
-            candidates=[
-                Candidate(
-                    id="url:0",
-                    title=meal.verbatim or meal.url,
-                    source_domain=_domain(meal.url),
-                    url=meal.url,
-                    thumbnail=thumbs.get(meal.url),
-                    origin=Origin.WEB,
-                    preselected=True,
-                )
-            ],
+            candidates=candidates,
         )
 
     source_errors: list[str] = []
@@ -291,6 +312,8 @@ async def discover_meal(meal: Meal, favorite_sites: list[str], user_id: str) -> 
                     c.thumbnail = thumbs.get(c.url)
         except Exception as exc:  # noqa: BLE001 - cosmetic
             logger.debug("thumbnail fetch failed: %s", exc)
+
+    await _cache_candidate_thumbnails(merged)
 
     if source_errors and not merged:
         status = MealStatus.ERROR

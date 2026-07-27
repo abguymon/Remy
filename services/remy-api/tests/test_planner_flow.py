@@ -293,12 +293,16 @@ async def env(client, monkeypatch):
     async def fake_thumbs(urls, **kw):
         return {}
 
+    async def fake_cache_thumbnails(urls, **kw):
+        return dict.fromkeys(urls, f"/plan/thumbnails/{'a' * 64}")
+
     async def fake_download(recipe_id, image_url, **kw):
         return None
 
     monkeypatch.setattr(deps, "get_llm_client", lambda: fake_llm)
     monkeypatch.setattr(deps, "get_search_provider", lambda *a, **k: fake_search)
     monkeypatch.setattr(deps, "fetch_thumbnails", fake_thumbs)
+    monkeypatch.setattr(deps, "cache_thumbnail_images", fake_cache_thumbnails)
     monkeypatch.setattr(deps, "scrape_recipe", fake_scrape)
     monkeypatch.setattr(deps, "download_recipe_image", fake_download)
     monkeypatch.setattr(deps, "kroger_search_products", fake_kroger.search_products)
@@ -357,7 +361,7 @@ async def test_full_golden_path(env):
     assert sum(1 for c in cand_b["candidates"] if c["url"] == "https://tacos.com/street") == 1
     assert any(c["origin"] == "favorite" for c in cand_b["candidates"])
     street = next(c for c in cand_b["candidates"] if c["url"] == "https://tacos.com/street")
-    assert street["thumbnail"] == "https://img.example/tacos.jpg"
+    assert street["thumbnail"] == f"/plan/thumbnails/{'a' * 64}"
 
     saved_cand = next(c for c in cand_a["candidates"] if c["origin"] == "saved")
     web_cand = next(c for c in cand_b["candidates"] if c["url"] == "https://tacos.com/street")

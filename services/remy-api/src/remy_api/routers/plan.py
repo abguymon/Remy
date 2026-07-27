@@ -8,7 +8,11 @@ operations return 409 with the current status; a second create is 409.
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, status
+from fastapi import Path as PathParam
+from fastapi.responses import FileResponse
 
 from remy_api.deps import CurrentUser, SessionDep
 from remy_api.errors import NotFoundError
@@ -21,6 +25,7 @@ from remy_api.planner.schemas import (
     RetryRequest,
     SelectRequest,
 )
+from remy_api.search import thumbnail_cache_path
 
 router = APIRouter(prefix="/plan", tags=["plan"])
 
@@ -29,6 +34,22 @@ router = APIRouter(prefix="/plan", tags=["plan"])
 async def create_plan(payload: PlanCreate, user: CurrentUser, session: SessionDep) -> PlanSnapshot:
     plan = await machine.create_plan(session, user, payload.text)
     return machine.snapshot(plan)
+
+
+@router.get("/thumbnails/{cache_key}", response_class=FileResponse)
+async def get_thumbnail(
+    cache_key: Annotated[str, PathParam(pattern=r"^[0-9a-f]{64}$")],
+    _user: CurrentUser,
+) -> FileResponse:
+    """Serve a cached public-web thumbnail through the authenticated API."""
+    image_path = thumbnail_cache_path(cache_key)
+    if not image_path.is_file():
+        raise NotFoundError("Thumbnail not found.")
+    return FileResponse(
+        image_path,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "private, max-age=86400"},
+    )
 
 
 @router.get("/state", response_model=PlanSnapshot)

@@ -328,11 +328,10 @@ function CandidateCard({
             selected ? 'border-terracotta ring-2 ring-terracotta' : 'border-line2'
           }`}
         >
-          {/* Saved-recipe thumbnails point at the Bearer-protected
-              /recipes/{id}/image endpoint — a plain <img> would 401. Load those
-              via AuthedImage (token fetch → blob URL). Web candidates carry
-              external og:image URLs and load fine with a plain <img>. */}
-          {candidate.thumbnail?.startsWith('/recipes/') ? (
+          {/* Recipe and cached search thumbnails are served by
+              Bearer-protected API endpoints. AuthedImage fetches them with the
+              token and renders a CSP-safe blob URL. */}
+          {candidate.thumbnail?.startsWith('/') ? (
             <AuthedImage path={candidate.thumbnail} alt={candidate.title} />
           ) : (
             <PhotoFallback src={candidate.thumbnail} alt={candidate.title} />

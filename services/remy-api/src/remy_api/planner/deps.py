@@ -16,13 +16,14 @@ from remy_api.llm.registry import get_prompt_id_llm
 from remy_api.recipes.images import download_recipe_image
 from remy_api.recipes.scraper import scrape_recipe
 from remy_api.recipes.store import create_recipe, get_recipe, search_recipes
-from remy_api.search import fetch_thumbnails, get_search_provider
+from remy_api.search import cache_thumbnail_images, fetch_thumbnails, get_search_provider
 
 __all__ = [
     "get_llm_client",
     "get_prompt_id_llm",
     "get_search_provider",
     "fetch_thumbnails",
+    "cache_thumbnail_images",
     "search_recipes",
     "create_recipe",
     "get_recipe",
