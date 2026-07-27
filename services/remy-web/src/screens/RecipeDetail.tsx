@@ -53,7 +53,7 @@ export default function RecipeDetail() {
           message="That recipe isn't here."
           action={
             <button
-              onClick={() => navigate('/cookbook')}
+              onClick={() => navigate('/app/cookbook')}
               className="mt-1 text-[13.5px] font-semibold text-terracotta"
             >
               Back to Cookbook
@@ -79,7 +79,7 @@ export default function RecipeDetail() {
       <div className="relative h-[230px]">
         <AuthedImage path={r.image_url} alt={r.title} label="recipe photo" />
         <button
-          onClick={() => navigate('/cookbook')}
+          onClick={() => navigate('/app/cookbook')}
           aria-label="Back to Cookbook"
           className="absolute left-3.5 top-3.5 flex h-9 w-9 items-center justify-center rounded-full bg-surface/85 text-lg text-ink"
         >
@@ -185,7 +185,7 @@ export default function RecipeDetail() {
           await del.mutateAsync(r.id)
           setConfirmDelete(false)
           toast('Recipe deleted')
-          navigate('/cookbook')
+          navigate('/app/cookbook')
         }}
       />
     </div>

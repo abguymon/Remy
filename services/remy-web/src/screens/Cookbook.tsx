@@ -70,7 +70,7 @@ export default function Cookbook() {
       ) : (
         <CardGrid>
           {items.map((r) => (
-            <RecipeCard key={r.id} recipe={r} onOpen={() => navigate(`/cookbook/${r.id}`)} />
+            <RecipeCard key={r.id} recipe={r} onOpen={() => navigate(`/app/cookbook/${r.id}`)} />
           ))}
         </CardGrid>
       )}
@@ -89,7 +89,7 @@ export default function Cookbook() {
           onClose={() => setAddOpen(false)}
           onView={(id) => {
             setAddOpen(false)
-            navigate(`/cookbook/${id}`)
+            navigate(`/app/cookbook/${id}`)
           }}
         />
       )}

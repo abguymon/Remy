@@ -130,7 +130,7 @@ export default function Step0Input({
       {krogerQuery.isSuccess && !krogerConnected && (
         <div className="mb-3 rounded-[12px] border border-warn-border bg-warn-bg px-3.5 py-3 text-[13px] text-warn">
           Kroger isn't connected yet — you can plan, but not order.{' '}
-          <Link to="/settings" className="font-semibold underline">
+          <Link to="/app/settings" className="font-semibold underline">
             Connect in Settings
           </Link>
           .

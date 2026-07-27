@@ -9,10 +9,10 @@ import { ToastHost } from './ui'
 import RatIcon from './RatIcon'
 
 const TABS = [
-  { to: '/', label: 'Plan', glyph: '🍳', end: true },
-  { to: '/cookbook', label: 'Cookbook', glyph: '📖', end: false },
-  { to: '/cart', label: 'Cart', glyph: '🛒', end: false },
-  { to: '/settings', label: 'Settings', glyph: '⚙', end: false },
+  { to: '/app', label: 'Plan', glyph: '🍳', end: true },
+  { to: '/app/cookbook', label: 'Cookbook', glyph: '📖', end: false },
+  { to: '/app/cart', label: 'Cart', glyph: '🛒', end: false },
+  { to: '/app/settings', label: 'Settings', glyph: '⚙', end: false },
 ]
 
 export default function AppShell() {

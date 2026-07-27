@@ -49,7 +49,7 @@ def _settings_redirect(**params: str) -> RedirectResponse:
     # it resolves to the deployed origin (Traefik serves web + /api on one host,
     # PRD §8); WEB_APP_URL overrides for split-origin dev (web :3000, api :8080).
     base = get_settings().web_app_url.rstrip("/")
-    return RedirectResponse(url=f"{base}/settings?{urlencode(params)}", status_code=status.HTTP_302_FOUND)
+    return RedirectResponse(url=f"{base}/app/settings?{urlencode(params)}", status_code=status.HTTP_302_FOUND)
 
 
 class AuthUrlResponse(BaseModel):

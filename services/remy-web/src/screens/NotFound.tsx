@@ -8,7 +8,7 @@ export default function NotFound() {
         glyph="🧭"
         message="Nothing here."
         action={
-          <Link to="/" className="mt-1 text-[13.5px] font-semibold text-terracotta">
+          <Link to="/app" className="mt-1 text-[13.5px] font-semibold text-terracotta">
             Back to Plan
           </Link>
         }
