@@ -55,7 +55,7 @@ def _dedup(candidates: list[Candidate]) -> list[Candidate]:
     seen_name_domain: set[tuple[str, str]] = set()
     out: list[Candidate] = []
     for c in candidates:
-        nurl = _normalize_url(c.url) if c.url else None
+        nurl = _normalize_url(c.url or c.dedupe_url)
         name_key = (c.title.strip().lower(), (c.source_domain or "").lower())
         if nurl and nurl in seen_urls:
             continue
@@ -88,6 +88,7 @@ async def _discover_saved(meal: Meal, user_id: str) -> list[Candidate]:
             {
                 "id": r.id,
                 "title": r.title,
+                "source_url": r.source_url,
                 "total_time": r.total_time,
                 "has_image": bool(r.image_path),
                 "key_ingredients": [ing.food or ing.raw for ing in r.ingredients][:8],
@@ -122,6 +123,7 @@ async def _discover_saved(meal: Meal, user_id: str) -> list[Candidate]:
             id=f"saved:{row['id']}",
             title=row["title"],
             source_domain="saved",
+            dedupe_url=row["source_url"],
             saved_recipe_id=row["id"],
             thumbnail=f"/recipes/{row['id']}/image" if row["has_image"] else None,
             total_time=row["total_time"],

@@ -96,6 +96,7 @@ class Candidate(BaseModel):
     title: str
     source_domain: str | None = None
     url: str | None = None
+    dedupe_url: str | None = Field(default=None, exclude=True)
     saved_recipe_id: str | None = None
     thumbnail: str | None = None
     total_time: str | None = None
