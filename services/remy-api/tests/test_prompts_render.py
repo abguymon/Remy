@@ -67,6 +67,23 @@ def test_ingredient_parsing_render_indexes_lines():
     assert "black beans" in p.user
 
 
+def test_ingredient_parsing_prompt_expands_toppings_and_preserves_varieties():
+    p = ingredient_parsing.render(
+        ingredient_parsing.IngredientParsingInput(
+            lines=[
+                "Optional toppings: yogurt or whipped cream, maple syrup or honey, and fresh fruit",
+                "10.5 ounces waxy or all-purpose potatoes, such as Yukon Gold",
+                "½ cup fresh dill, mint or parsley leaves (or any combination)",
+            ]
+        )
+    )
+
+    assert "one object for EACH concrete food option" in p.system
+    assert 'food:"yukon gold potato"' in p.system
+    assert "quantity and unit to null" in p.system
+    assert '"combination totaling 1/2 cup"' in p.system
+
+
 def test_product_extraction_shares_one_rules_block():
     batch = product_extraction.render_batch(
         product_extraction.ProductExtractionInput(

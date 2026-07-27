@@ -222,6 +222,7 @@ async def _discover_web(meal: Meal, favorite_sites: list[str]) -> list[Candidate
                 title=r.title,
                 source_domain=domain,
                 url=r.url,
+                thumbnail=r.thumbnail,
                 origin=Origin.FAVORITE if is_fav else Origin.WEB,
             )
         )
@@ -281,7 +282,7 @@ async def discover_meal(meal: Meal, favorite_sites: list[str], user_id: str) -> 
     merged = _dedup([*saved, *web])[:_MAX_CANDIDATES]
 
     # Thumbnails for web candidates (cosmetic; never blocks).
-    web_urls = [c.url for c in merged if c.url and c.origin != Origin.SAVED]
+    web_urls = [c.url for c in merged if c.url and c.origin != Origin.SAVED and c.thumbnail is None]
     if web_urls:
         try:
             thumbs = await deps.fetch_thumbnails(web_urls)

@@ -26,6 +26,15 @@ from remy_api.search.base import (
 logger = logging.getLogger(__name__)
 
 
+def _thumbnail_url(item: dict) -> str | None:
+    """Read the preview image fields emitted by SearXNG's result engines."""
+    for key in ("thumbnail", "img_src"):
+        value = item.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
 class SearxngSearchProvider:
     """Web search via a self-hosted SearXNG instance's JSON API."""
 
@@ -88,6 +97,7 @@ class SearxngSearchProvider:
                     title=title,
                     url=url,
                     snippet=item.get("content", "") or "",
+                    thumbnail=_thumbnail_url(item),
                 )
             )
         return results

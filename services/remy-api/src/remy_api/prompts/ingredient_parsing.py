@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from remy_api.prompts.base import RenderedPrompt, indexed, json_block
 
 PROMPT_ID = "ingredient_parsing"
-VERSION = 1
+VERSION = 3
 
 
 class IngredientParsingInput(BaseModel):
@@ -39,7 +39,22 @@ You parse recipe ingredient lines into structured fields. Output MUST be JSON:
 {"ingredients": [{"index": int, "quantity": number|null, "unit": string|null,
 "food": string, "note": string|null}]}
 
-Return exactly one object per input line, echoing its `index`.
+Normally return exactly one object per input line, echoing its `index`.
+For a compound line explicitly introduced as "optional toppings", "toppings",
+"optional garnishes", "garnishes", or similar, the label itself is NOT food:
+return one object for EACH concrete food option named, repeating the source
+`index` for each object. Mark each one's note as "optional" plus any relevant
+prep. For example, "Optional toppings: yogurt or whipped cream, maple syrup or
+honey, and fresh fruit" becomes five objects (yogurt, whipped cream, maple syrup,
+honey, fresh fruit), all with the same index. Never emit generic "topping" or
+"garnish" as food.
+Likewise, when a line explicitly says the named foods may be used in "any
+combination", as a "mixture", or equivalent, return one object for EACH named
+option with the same source `index`. Since the stated quantity applies to the
+combination as a whole, set each option's quantity and unit to null rather than
+incorrectly assigning the full amount to every option. Put the shared amount in
+the note, e.g. "combination totaling 1/2 cup". This lets the shopper include any
+subset without overstating how much of each food the recipe requires.
 
 Fields:
 - quantity: the numeric amount as a number (convert fractions: "1/2" -> 0.5,
@@ -50,7 +65,9 @@ Fields:
   ("onions" -> "onion", "cloves garlic" -> "garlic", "black beans" -> "black bean",
   "boneless chicken thighs" -> "chicken thigh"). Drop leading quantities/units and
   trailing prep. Keep meaningful qualifiers that change the product
-  ("brown sugar", "green onion", "smoked paprika").
+  ("brown sugar", "green onion", "smoked paprika"). Preserve a specific variety
+  or example supplied by the recipe instead of generalizing it: "waxy or
+  all-purpose potatoes, such as Yukon Gold" -> food:"yukon gold potato".
 - note: prep or qualifier text ("finely diced", "to taste", "drained and rinsed",
   "at room temperature"), or null.
 

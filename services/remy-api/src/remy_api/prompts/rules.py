@@ -45,6 +45,8 @@ the number of PACKAGES to buy (not the recipe amount).
      as a search term for a fresh produce line: at grocery search those words
      match CANNED/JARRED goods (e.g. "sliced carrots" returns canned sliced
      carrots), which is the wrong department for fresh produce.
+   - Preserve a specific variety carried by the parsed food. Never broaden
+     "Yukon Gold potato" to generic "potato"; search "Yukon Gold potatoes".
    - This covers produce/herbs only and does NOT override rule 3 (beans stay
      canned by default). If the recipe LINE ITSELF says canned/frozen/jarred (or a
      packaged pre-cut product), keep that form — the cut-style rule applies only

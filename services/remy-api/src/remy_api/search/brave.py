@@ -22,6 +22,19 @@ logger = logging.getLogger(__name__)
 _BRAVE_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
 
 
+def _thumbnail_url(item: dict) -> str | None:
+    """Read Brave's thumbnail object while tolerating older string payloads."""
+    value = item.get("thumbnail")
+    if isinstance(value, str):
+        return value.strip() or None
+    if isinstance(value, dict):
+        for key in ("src", "original"):
+            url = value.get(key)
+            if isinstance(url, str) and url.strip():
+                return url.strip()
+    return None
+
+
 class BraveSearchProvider:
     """Web search via the Brave Search API."""
 
@@ -85,6 +98,7 @@ class BraveSearchProvider:
                     title=title,
                     url=url,
                     snippet=item.get("description", "") or "",
+                    thumbnail=_thumbnail_url(item),
                 )
             )
         return results

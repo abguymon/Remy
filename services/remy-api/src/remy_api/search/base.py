@@ -13,6 +13,7 @@ class SearchResult(BaseModel):
     title: str
     url: str
     snippet: str = ""
+    thumbnail: str | None = None
 
 
 @runtime_checkable

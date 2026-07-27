@@ -42,6 +42,15 @@ def test_sums_cups():
     assert lines[0].segments[0].quantity == 3
 
 
+def test_single_fractional_cup_keeps_source_unit_fraction_and_plural():
+    lines = consolidate([_c("pecan", 2 / 3, "cup", raw="⅔ cup roughly chopped pecans")])
+
+    line = lines[0]
+    assert line.quantity == 2 / 3
+    assert line.unit == "cup"
+    assert line.display == "2/3 cup pecans"
+
+
 def test_imperial_weight_sums_to_pounds():
     # 8 oz + 8 oz = 16 oz = 1 lb
     lines = consolidate([_c("beef", 8, "oz"), _c("beef", 8, "oz")])

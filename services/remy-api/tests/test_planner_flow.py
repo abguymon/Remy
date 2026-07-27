@@ -122,7 +122,12 @@ class FakeSearch:
                 return [SearchResult(title="Best Street Tacos", url="https://fav.com/tacos", snippet="")]
             return [
                 SearchResult(title="21 Best Taco Recipes", url="https://roundup.com/21-best", snippet="listicle"),
-                SearchResult(title="Easy Street Tacos", url="https://tacos.com/street", snippet=""),
+                SearchResult(
+                    title="Easy Street Tacos",
+                    url="https://tacos.com/street",
+                    snippet="",
+                    thumbnail="https://img.example/tacos.jpg",
+                ),
                 SearchResult(title="Easy Street Tacos", url="https://tacos.com/street", snippet=""),  # dup
             ]
         return []
@@ -351,6 +356,8 @@ async def test_full_golden_path(env):
     # Dedup: the duplicated tacos.com/street URL collapses to a single candidate.
     assert sum(1 for c in cand_b["candidates"] if c["url"] == "https://tacos.com/street") == 1
     assert any(c["origin"] == "favorite" for c in cand_b["candidates"])
+    street = next(c for c in cand_b["candidates"] if c["url"] == "https://tacos.com/street")
+    assert street["thumbnail"] == "https://img.example/tacos.jpg"
 
     saved_cand = next(c for c in cand_a["candidates"] if c["origin"] == "saved")
     web_cand = next(c for c in cand_b["candidates"] if c["url"] == "https://tacos.com/street")

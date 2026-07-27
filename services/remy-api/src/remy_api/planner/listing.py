@@ -11,7 +11,9 @@ word-boundary match against the user's pantry staples (FR-11).
 from __future__ import annotations
 
 import logging
+import re
 import uuid
+from collections import defaultdict
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,6 +36,8 @@ from remy_api.prompts import ingredient_parsing
 
 logger = logging.getLogger("remy.planner.listing")
 
+_EXPLICIT_COMBINATION = re.compile(r"\b(?:any combination|preferably a mixture|a mix of all)\b", re.IGNORECASE)
+
 
 async def _parse_recipe_lines(session: AsyncSession, recipe_id: str, recipe_title: str) -> list[ParsedContribution]:
     """Load a recipe's ingredient rows, parse with P4a, persist the parse."""
@@ -52,44 +56,68 @@ async def _parse_recipe_lines(session: AsyncSession, recipe_id: str, recipe_titl
     if not raw_lines:
         return []
 
-    parsed_by_index: dict[int, ingredient_parsing.ParsedIngredient] = {}
+    parsed_by_index: dict[int, list[ingredient_parsing.ParsedIngredient]] = {}
     try:
         out = await deps.get_llm_client().structured(
             ingredient_parsing.render(ingredient_parsing.IngredientParsingInput(lines=raw_lines)),
             ingredient_parsing.IngredientParsingOutput,
         )
-        parsed_by_index = {p.index: p for p in out.ingredients if 0 <= p.index < len(raw_lines)}
+        grouped: defaultdict[int, list[ingredient_parsing.ParsedIngredient]] = defaultdict(list)
+        for parsed in out.ingredients:
+            if 0 <= parsed.index < len(raw_lines):
+                grouped[parsed.index].append(parsed)
+        parsed_by_index = dict(grouped)
     except LLMError as exc:
         # Never silent-empty: fall back to raw-as-food so the line still appears.
         logger.info("ingredient parsing failed for recipe %s: %s", recipe_id, exc)
 
     contributions: list[ParsedContribution] = []
     for i, row in enumerate(rows):
-        parsed = parsed_by_index.get(i)
-        if parsed is not None:
+        parsed_items = parsed_by_index.get(i, [])
+        if len(parsed_items) == 1:
+            parsed = parsed_items[0]
             # Persist the parse back onto the stored recipe line (enriches cookbook/FTS).
             row.quantity = parsed.quantity
             row.unit = parsed.unit
             row.food = parsed.food
             row.note = parsed.note
-            food = parsed.food
-            quantity = parsed.quantity
-            unit = parsed.unit
-            note = parsed.note
+        elif len(parsed_items) > 1:
+            # One database row cannot represent a decomposed topping/garnish list.
+            # Keep the lossless raw line persisted and use the expanded parses for
+            # this shopping list instead of retaining an old generic parse.
+            if _EXPLICIT_COMBINATION.search(row.raw):
+                # The amount belongs to the combination as a whole. Guard against
+                # a model copying it onto every option and overstating each one.
+                for parsed in parsed_items:
+                    parsed.quantity = None
+                    parsed.unit = None
+            row.quantity = None
+            row.unit = None
+            row.food = None
+            row.note = None
         else:
-            food = (row.food or row.raw).strip().lower()
-            quantity, unit, note = row.quantity, row.unit, row.note
-        contributions.append(
-            ParsedContribution(
-                recipe_id=recipe_id,
-                recipe_title=recipe_title,
-                raw=row.raw,
-                food=food,
-                quantity=quantity,
-                unit=unit,
-                note=note,
+            parsed_items = [
+                ingredient_parsing.ParsedIngredient(
+                    index=i,
+                    quantity=row.quantity,
+                    unit=row.unit,
+                    food=(row.food or row.raw).strip().lower(),
+                    note=row.note,
+                )
+            ]
+
+        for parsed in parsed_items:
+            contributions.append(
+                ParsedContribution(
+                    recipe_id=recipe_id,
+                    recipe_title=recipe_title,
+                    raw=row.raw,
+                    food=parsed.food,
+                    quantity=parsed.quantity,
+                    unit=parsed.unit,
+                    note=parsed.note,
+                )
             )
-        )
     return contributions
 
 

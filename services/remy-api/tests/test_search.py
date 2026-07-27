@@ -20,7 +20,12 @@ from remy_api.search import (
 _BRAVE_PAYLOAD = {
     "web": {
         "results": [
-            {"title": "Easy Tacos", "url": "https://x.com/tacos", "description": "yum"},
+            {
+                "title": "Easy Tacos",
+                "url": "https://x.com/tacos",
+                "description": "yum",
+                "thumbnail": {"src": "https://img.example/brave.jpg"},
+            },
             {"title": "Taco Night", "url": "https://y.com/night", "description": ""},
             {"title": "no url here"},
         ]
@@ -54,6 +59,7 @@ async def test_brave_parses_results(monkeypatch):
     results = await _run_brave(monkeypatch, handler)
     assert [r.url for r in results] == ["https://x.com/tacos", "https://y.com/night"]
     assert results[0].snippet == "yum"
+    assert results[0].thumbnail == "https://img.example/brave.jpg"
 
 
 async def test_brave_site_restriction(monkeypatch):
@@ -126,8 +132,18 @@ def test_llm_provider_detects_supported():
 
 _SEARXNG_PAYLOAD = {
     "results": [
-        {"title": "Easy Tacos", "url": "https://x.com/tacos", "content": "yum"},
-        {"title": "Taco Night", "url": "https://y.com/night", "content": ""},
+        {
+            "title": "Easy Tacos",
+            "url": "https://x.com/tacos",
+            "content": "yum",
+            "thumbnail": "https://img.example/searx-thumb.jpg",
+        },
+        {
+            "title": "Taco Night",
+            "url": "https://y.com/night",
+            "content": "",
+            "img_src": "https://img.example/searx-src.jpg",
+        },
         {"title": "no url here"},
     ]
 }
@@ -153,6 +169,10 @@ async def test_searxng_parses_results(monkeypatch):
     results = await _run_searxng(monkeypatch, handler, max_results=10)
     assert [r.url for r in results] == ["https://x.com/tacos", "https://y.com/night"]
     assert results[0].snippet == "yum"
+    assert [r.thumbnail for r in results] == [
+        "https://img.example/searx-thumb.jpg",
+        "https://img.example/searx-src.jpg",
+    ]
 
 
 async def test_searxng_site_restriction(monkeypatch):

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from fractions import Fraction
 
 # --- Unit table --------------------------------------------------------------
 # Each known unit maps to (family, factor-to-base). Units in the same family are
@@ -94,20 +95,39 @@ def _to_base(quantity: float, unit: str | None) -> float:
 
 
 def _fmt_number(value: float) -> str:
-    """Trim a float to a tidy string ("2.0" -> "2", "1.50" -> "1.5")."""
+    """Render recipe-friendly fractions, falling back to a tidy decimal."""
     rounded = round(value, 2)
     if rounded == int(rounded):
         return str(int(rounded))
+    fraction = Fraction(value).limit_denominator(8)
+    if fraction.denominator in {2, 3, 4, 8} and abs(float(fraction) - value) < 1e-6:
+        whole, numerator = divmod(abs(fraction.numerator), fraction.denominator)
+        sign = "-" if fraction.numerator < 0 else ""
+        if whole and numerator:
+            return f"{sign}{whole} {numerator}/{fraction.denominator}"
+        if whole:
+            return f"{sign}{whole}"
+        return f"{sign}{numerator}/{fraction.denominator}"
     return f"{rounded:g}"
 
 
-def _render_segment(family: str, base_total: float, raw_unit: str | None) -> tuple[str | None, float, str]:
+def _render_segment(
+    family: str,
+    base_total: float,
+    raw_unit: str | None,
+    preferred_unit: str | None = None,
+) -> tuple[str | None, float, str]:
     """Render a summed base amount to (unit, quantity, display) for a family."""
     if family == _COUNT:
         return None, base_total, _fmt_number(base_total)
     if family.startswith("raw:"):
         unit = raw_unit or family[4:]
         return unit, base_total, f"{_fmt_number(base_total)} {unit}"
+    if preferred_unit:
+        known = _UNIT_TABLE.get(preferred_unit)
+        if known is not None and known[0] == family:
+            qty = base_total / known[1]
+            return preferred_unit, qty, f"{_fmt_number(qty)} {preferred_unit}"
     ladder = _RENDER_LADDER[family]
     for unit, factor in ladder:
         if base_total >= factor:
@@ -160,6 +180,28 @@ def _normalize_food(food: str | None, raw: str) -> str:
     return f or raw.strip().lower()
 
 
+def _plural_form(food: str) -> str:
+    """A small inflector used only when the source line confirms the plural."""
+    words = food.split()
+    if not words:
+        return food
+    last = words[-1]
+    if re.search(r"[^aeiou]y$", last):
+        plural = f"{last[:-1]}ies"
+    elif last.endswith(("s", "x", "z", "ch", "sh", "o")):
+        plural = f"{last}es"
+    else:
+        plural = f"{last}s"
+    return " ".join([*words[:-1], plural])
+
+
+def _display_food(food: str, members: list[ParsedContribution]) -> str:
+    """Keep canonical singular matching keys but honor source-text plurals."""
+    plural = _plural_form(food)
+    pattern = re.compile(rf"\b{re.escape(plural)}\b", re.IGNORECASE)
+    return plural if any(pattern.search(member.raw) for member in members) else food
+
+
 def consolidate(contributions: list[ParsedContribution]) -> list[ConsolidatedLine]:
     """Merge parsed lines sharing a normalized ``food`` (FR-10).
 
@@ -186,6 +228,7 @@ def consolidate(contributions: list[ParsedContribution]) -> list[ConsolidatedLin
         family_totals: dict[str, float] = {}
         family_raw_unit: dict[str, str | None] = {}
         family_first_order: dict[str, int] = {}
+        family_member_count: dict[str, int] = {}
         unquantified = 0
         seq = 0
         for m in members:
@@ -195,6 +238,7 @@ def consolidate(contributions: list[ParsedContribution]) -> list[ConsolidatedLin
             fam = _family_of(m.unit)
             family_totals[fam] = family_totals.get(fam, 0.0) + _to_base(m.quantity, m.unit)
             family_raw_unit.setdefault(fam, m.unit)
+            family_member_count[fam] = family_member_count.get(fam, 0) + 1
             if fam not in family_first_order:
                 family_first_order[fam] = seq
                 seq += 1
@@ -202,7 +246,10 @@ def consolidate(contributions: list[ParsedContribution]) -> list[ConsolidatedLin
         segments: list[Segment] = []
         # Emit summed segments in first-seen family order.
         for fam in sorted(family_totals, key=lambda f: family_first_order[f]):
-            unit, qty, disp = _render_segment(fam, family_totals[fam], family_raw_unit.get(fam))
+            preferred = family_raw_unit.get(fam) if family_member_count[fam] == 1 else None
+            unit, qty, disp = _render_segment(
+                fam, family_totals[fam], family_raw_unit.get(fam), preferred_unit=preferred
+            )
             segments.append(Segment(unit=unit, quantity=qty, display=disp))
         # An unquantified segment (e.g. "salt to taste") shows just the food.
         if unquantified and not segments:
@@ -213,16 +260,21 @@ def consolidate(contributions: list[ParsedContribution]) -> list[ConsolidatedLin
         primary_qty: float | None = None
         if family_totals:
             primary_fam = max(family_totals, key=lambda f: family_totals[f])
+            preferred = family_raw_unit.get(primary_fam) if family_member_count[primary_fam] == 1 else None
             primary_unit, primary_qty, _ = _render_segment(
-                primary_fam, family_totals[primary_fam], family_raw_unit.get(primary_fam)
+                primary_fam,
+                family_totals[primary_fam],
+                family_raw_unit.get(primary_fam),
+                preferred_unit=preferred,
             )
 
         conflict = len(segments) > 1
+        display_food = _display_food(key, members)
         if segments and not (len(segments) == 1 and segments[0].display == key):
             # e.g. "2 cup + 1 clove garlic"; the unquantified-only case shows bare food.
-            display = f"{' + '.join(s.display for s in segments)} {key}"
+            display = f"{' + '.join(s.display for s in segments)} {display_food}"
         else:
-            display = key
+            display = display_food
 
         note = next((m.note for m in members if m.note), None)
         lines.append(
