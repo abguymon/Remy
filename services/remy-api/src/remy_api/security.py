@@ -13,7 +13,6 @@ import hashlib
 import secrets
 from datetime import UTC, datetime, timedelta
 
-import bcrypt
 import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
@@ -23,7 +22,6 @@ from remy_api.errors import AuthenticationError
 
 API_TOKEN_PREFIX = "remy_"
 _ph = PasswordHasher()
-_BCRYPT_PREFIXES = ("$2a$", "$2b$", "$2y$")
 
 
 # --- Passwords ---------------------------------------------------------------
@@ -34,26 +32,11 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    if password_hash.startswith(_BCRYPT_PREFIXES):
-        try:
-            return bcrypt.checkpw(password.encode(), password_hash.encode())
-        except (TypeError, ValueError):
-            return False
     try:
         return _ph.verify(password_hash, password)
     except VerifyMismatchError:
         return False
     except Exception:  # malformed hash — treat as non-match, never crash auth
-        return False
-
-
-def password_needs_rehash(password_hash: str) -> bool:
-    """Return true for supported legacy hashes or outdated Argon2 parameters."""
-    if password_hash.startswith(_BCRYPT_PREFIXES):
-        return True
-    try:
-        return _ph.check_needs_rehash(password_hash)
-    except Exception:
         return False
 
 
