@@ -4,10 +4,11 @@ bootstrap -> login -> settings round-trip (defaults seeded from yaml) ->
 API token create -> use as bearer -> revoke -> rejected.
 """
 
+import bcrypt
 import pytest_asyncio
 
 from remy_api.db import get_session_factory
-from remy_api.models import FulfillmentMethod
+from remy_api.models import FulfillmentMethod, User
 from remy_api.seed import default_favorite_sites, default_pantry_items
 from remy_api.user_service import create_user
 
@@ -41,6 +42,25 @@ async def test_login_success_and_failure(bootstrapped):
 
     unknown = await client.post("/auth/login", json={"username": "nope", "password": "x"})
     assert unknown.status_code == 401
+
+
+async def test_legacy_bcrypt_login_upgrades_hash(client):
+    factory = get_session_factory()
+    async with factory() as session:
+        user = await create_user(session, "legacy-owner", PASSWORD)
+        user.password_hash = bcrypt.hashpw(PASSWORD.encode(), bcrypt.gensalt()).decode()
+        await session.commit()
+
+    response = await client.post(
+        "/auth/login",
+        json={"username": "legacy-owner", "password": PASSWORD},
+    )
+    assert response.status_code == 200
+
+    async with factory() as session:
+        upgraded = await session.get(User, user.id)
+        assert upgraded is not None
+        assert upgraded.password_hash.startswith("$argon2")
 
 
 async def test_unauthenticated_requests_rejected(client):

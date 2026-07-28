@@ -13,7 +13,13 @@ from remy_api.errors import AuthenticationError, UnprocessableError
 from remy_api.models import Invitation, User
 from remy_api.rate_limit import check_login_rate_limit, check_registration_rate_limit
 from remy_api.schemas import InvitationRegister, LoginRequest, TokenResponse, UserProfile
-from remy_api.security import create_access_token, hash_invitation_token, verify_password
+from remy_api.security import (
+    create_access_token,
+    hash_invitation_token,
+    hash_password,
+    password_needs_rehash,
+    verify_password,
+)
 from remy_api.user_service import create_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -30,6 +36,9 @@ async def login(
         raise AuthenticationError("Invalid username or password.")
     if not user.is_active:
         raise AuthenticationError("Account is disabled.")
+    if password_needs_rehash(user.password_hash):
+        user.password_hash = hash_password(payload.password)
+        await session.commit()
 
     settings = get_settings()
     token = create_access_token(user.id, user.auth_version)
