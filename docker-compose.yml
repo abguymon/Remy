@@ -26,8 +26,10 @@ services:
     # handles ingress (host 8080 belongs to Traefik). For direct-API dev use
     # uvicorn (see README).
     volumes:
-      # Shared data volume: SQLite DB + recipe images
-      - ./data:/app/data
+      # Shared data volume: SQLite DB + recipe images. This is deliberately
+      # required instead of defaulting to ./data: launching Compose from the
+      # wrong checkout must fail rather than silently create an empty cookbook.
+      - ${REMY_DATA_DIR:?Set REMY_DATA_DIR to the absolute Remy data directory}:/app/data
       # Seed defaults (read-only) — single source of truth at repo root
       - ./pantry.yaml:/app/seed/pantry.yaml:ro
       - ./recipe_sources.yaml:/app/seed/recipe_sources.yaml:ro

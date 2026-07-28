@@ -138,7 +138,12 @@ failure-isolated and cannot turn a successful Remy request into an error.
 
 ### 3. Build and run
 
+Set `REMY_DATA_DIR` to the data directory you intend to use. Compose requires
+this value and will refuse to start without it, preventing an accidental launch
+against a new empty `./data` directory.
+
 ```bash
+export REMY_DATA_DIR="$PWD/data"     # local development only
 docker compose build
 docker compose up -d
 curl localhost:8080/health          # {"status":"ok",...}
@@ -285,7 +290,10 @@ strict host/origin checks.
 
 ## Deployment
 
-- **Compose** runs the two services on a shared `./data` volume. `remy-web`
+- **Compose** requires an explicit `REMY_DATA_DIR` and mounts it as the shared
+  runtime volume. Use an absolute path in production; Remy intentionally has no
+  `./data` fallback because that can silently produce an empty cookbook when
+  Compose is launched from the wrong checkout. `remy-web`
   joins both `t2_proxy` (Traefik) and `remy-net`; `remy-api` is internal-only on
   `remy-net` and reached via the web container's nginx `/api/` proxy (which
   strips the `/api` prefix).
