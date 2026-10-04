@@ -1,8 +1,10 @@
 // Plan step 3 — review cart (THE FLAGSHIP, DESIGN_BRIEF §5). Stacked product
 // cards (never a table), inline swap expander with ≤3 alternatives + manual
-// search, substitution self-explain, per-item matching skeletons, not_found
-// manual search, scoped item retry, and a sticky live estimated-total bar.
-import { useEffect, useState } from 'react'
+// search, substitution self-explain, "Not sure — check this" for low-confidence
+// picks (alternatives open, "Keep this one" confirms), per-item matching
+// skeletons, not_found manual search, scoped item retry, and a sticky live
+// estimated-total bar.
+import { useEffect, useRef, useState } from 'react'
 import { ApiError } from '../../lib/api'
 import {
   useCartEdits,
@@ -31,6 +33,9 @@ import type { PillTone } from '../../components/ui'
 
 const RESOLVED = new Set(['matched', 'substituted', 'stock_unknown', 'not_found', 'failed'])
 const IN_CART = new Set(['matched', 'substituted', 'stock_unknown'])
+// Below this the ranker's pick was right only ~1 time in 3 on past orders
+// (scripts/eval_product_ranking.py), so ask the shopper to check it.
+const UNSURE_BELOW = 0.6
 
 // Recipe attribution for a cart item: the raw ingredient line it came from plus
 // the recipe title(s) that contributed it (snapshot carries this via line_id →
@@ -146,6 +151,7 @@ export default function Step3Cart({ snapshot, live }: { snapshot: PlanSnapshot; 
                   applyEdit({ op: 'swap', item_id: item.id, alternative_id: altId })
                 }
                 onDrop={() => applyEdit({ op: 'drop', item_id: item.id })}
+                onConfirm={() => applyEdit({ op: 'confirm', item_id: item.id })}
                 onManualSearch={(term) =>
                   applyEdit({ op: 'manual_search', item_id: item.id, term })
                 }
@@ -241,6 +247,7 @@ function CartItemCard({
   onSetCount,
   onSwap,
   onDrop,
+  onConfirm,
   onManualSearch,
   onRetry,
 }: {
@@ -251,6 +258,7 @@ function CartItemCard({
   onSetCount: (n: number) => void
   onSwap: (alternativeId: string) => void
   onDrop: () => void
+  onConfirm: () => void
   onManualSearch: (term: string) => void
   onRetry: () => void
 }) {
@@ -259,6 +267,21 @@ function CartItemCard({
   const [manualText, setManualText] = useState('')
   const [count, setCount] = useState(item.count)
   useEffect(() => setCount(item.count), [item.count])
+
+  // An unsure pick opens its alternatives once, when it first resolves.
+  const unsure =
+    live &&
+    item.pick_confidence != null &&
+    item.pick_confidence < UNSURE_BELOW &&
+    !!item.chosen &&
+    item.alternatives.length > 0
+  const autoOpened = useRef(false)
+  useEffect(() => {
+    if (unsure && !autoOpened.current) {
+      autoOpened.current = true
+      setSwapOpen(true)
+    }
+  }, [unsure])
 
   // --- pending / matching → skeleton --------------------------------------
   if (item.status === 'pending' || item.status === 'matching') {
@@ -300,7 +323,13 @@ function CartItemCard({
   return (
     <div
       className={`rounded-card border bg-surface shadow-card ${
-        notFound ? 'border-danger-border' : substituted ? 'border-warn-border' : 'border-line'
+        notFound
+          ? 'border-danger-border'
+          : substituted
+            ? 'border-warn-border'
+            : unsure
+              ? 'border-terracotta/50'
+              : 'border-line'
       }`}
     >
       <div className="p-3.5">
@@ -337,6 +366,12 @@ function CartItemCard({
               )}
               {substituted && (
                 <span className="text-[11.5px] font-medium text-warn">wanted: {item.search_term}</span>
+              )}
+              {unsure && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-terracotta-soft px-2 py-[3px] text-[11px] font-semibold text-terracotta-deep">
+                  <Icon name="info" size={11} strokeWidth={2.4} />
+                  Not sure — check this
+                </span>
               )}
             </div>
           </div>
@@ -408,8 +443,23 @@ function CartItemCard({
         {/* swap expander */}
         {swapOpen && !notFound && (
           <div className="mt-3 rounded-[14px] border border-line bg-cream p-2.5">
-            <SectionLabel className="mb-2 pl-1 pt-0.5">Other matches</SectionLabel>
+            <SectionLabel className="mb-2 pl-1 pt-0.5">
+              {unsure ? `Remy wasn't sure which "${item.search_term}" you want` : 'Other matches'}
+            </SectionLabel>
             <div className="flex flex-col gap-1.5">
+              {unsure && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onConfirm()
+                    setSwapOpen(false)
+                  }}
+                  className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-[12px] border border-terracotta/50 bg-surface text-[13.5px] font-semibold text-terracotta-deep hover:bg-terracotta-soft"
+                >
+                  <Icon name="check" size={15} strokeWidth={2.6} />
+                  Keep this one
+                </button>
+              )}
               {item.alternatives.map((alt) => (
                 <AltRow
                   key={alt.alternative_id}

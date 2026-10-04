@@ -81,9 +81,7 @@ async def _eval_one(case: dict, sem: asyncio.Semaphore) -> dict:
         row = dict(case, n_results=len(products), in_results=any(p.upc == case["bought_upc"] for p in products))
         if not products:
             return row
-        llm, llm_ms = await _timed(
-            matching._rank_with_llm(case["term"], case["target_size"], case["count"], products)
-        )
+        llm, llm_ms = await _timed(matching._rank_with_llm(case["term"], case["target_size"], case["count"], products))
         (jev_ranked, jev_conf), jev_ms = await _timed(
             matching._rank_with_jev(case["term"], case["target_size"], case["count"], products)
         )
@@ -110,7 +108,9 @@ async def main(limit: int, out_path: str | None) -> None:
     rows = [r for r in rows if isinstance(r, dict) and "llm_top" in r]
     scored = [r for r in rows if r["in_results"]]
 
-    print(f"\n{len(cases)} past purchases, {len(rows)} searched, {len(scored)} where the bought product is in results\n")
+    print(
+        f"\n{len(cases)} past purchases, {len(rows)} searched, {len(scored)} where the bought product is in results\n"
+    )
     llm_hit = sum(r["llm_top"] == r["bought_upc"] for r in scored)
     jev_hit = sum(r["jev_top"] == r["bought_upc"] for r in scored)
     agree = sum(r["llm_top"] == r["jev_top"] for r in rows)
@@ -129,10 +129,11 @@ async def main(limit: int, out_path: str | None) -> None:
     print("\nDisagreements:")
     for r in rows:
         if r["llm_top"] != r["jev_top"]:
-            mark = lambda upc: "✓" if upc == r["bought_upc"] else " "  # noqa: E731
+            llm_mark = "✓" if r["llm_top"] == r["bought_upc"] else " "
+            jev_mark = "✓" if r["jev_top"] == r["bought_upc"] else " "
             print(f"  {r['term'][:28]:<28} conf {r['jev_confidence'] or 0:.2f}")
-            print(f"     {mark(r['llm_top'])} LLM: {r['llm_top_desc']}")
-            print(f"     {mark(r['jev_top'])} Jev: {r['jev_top_desc']}")
+            print(f"     {llm_mark} LLM: {r['llm_top_desc']}")
+            print(f"     {jev_mark} Jev: {r['jev_top_desc']}")
             if r["in_results"] and r["bought_upc"] not in (r["llm_top"], r["jev_top"]):
                 print(f"       bought: {r['bought']}")
     if out_path:

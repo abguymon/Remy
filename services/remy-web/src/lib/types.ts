@@ -130,6 +130,8 @@ export interface MatchItem {
   alternatives: Alternative[]
   error: string | null
   confidence: number | null
+  // Ranker's confidence in its pick (Jev only). Low → "Not sure — check this".
+  pick_confidence: number | null
   // Chosen from purchase memory (a "usual") — the match short-circuit skipped
   // ranking, or it was added from the usuals strip.
   is_usual: boolean
@@ -193,7 +195,7 @@ export interface ListEdit {
 }
 
 export interface CartEdit {
-  op: 'swap' | 'drop' | 'set_count' | 'manual_search' | 'add_upc'
+  op: 'swap' | 'drop' | 'set_count' | 'manual_search' | 'add_upc' | 'confirm'
   item_id?: string | null
   alternative_id?: string | null
   count?: number | null

@@ -19,7 +19,6 @@ import uuid
 from sqlalchemy import select
 
 from remy_api import memory
-from remy_api.config import get_settings
 from remy_api.decisions import jev
 from remy_api.kroger.errors import KrogerError, KrogerNotConnectedError
 from remy_api.kroger.models import Product, StockLevel
@@ -202,12 +201,12 @@ async def _rank(
 ) -> tuple[list[Product], float | None]:
     """Rank products best-first ([] if none acceptable) with the pick confidence when known.
 
-    ``PRODUCT_RANKER=jev`` uses Jev; any Jev failure is logged and falls back to
-    the P5 LLM ranking for that item.
+    With ``products`` in ``JEV_STEPS`` this uses Jev; any Jev failure is logged
+    and falls back to the P5 LLM ranking for that item.
     """
     if not products:
         return [], None
-    if get_settings().product_ranker == "jev":
+    if jev.enabled("products"):
         try:
             return await _rank_with_jev(term, target_size, package_qty, products)
         except jev.JevError as exc:
@@ -460,7 +459,7 @@ async def _add_usual_to_cart(
 
 
 async def apply_cart_edits(session, plan: Plan, ops: list) -> None:  # noqa: ANN001
-    """Apply swap/drop/set_count/manual_search/add_upc to the cart draft (reviewing_cart)."""
+    """Apply swap/drop/set_count/manual_search/add_upc/confirm to the cart draft (reviewing_cart)."""
     cart = CartState(**(plan.matches or {}))
     by_id = {it.id: it for it in cart.items}
 
@@ -496,6 +495,7 @@ async def apply_cart_edits(session, plan: Plan, ops: list) -> None:  # noqa: ANN
                 item.chosen = ProductRef(**alt.model_dump(exclude={"alternative_id"}))
                 item.status = ItemStatus.MATCHED
                 item.is_usual = False  # a manual swap is a user pick, not an auto-usual
+                item.pick_confidence = None  # the user decided; nothing left to check
                 # Remember the swap as a preference for this food (clears siblings).
                 await memory.record_swap(
                     session,
@@ -507,6 +507,20 @@ async def apply_cart_edits(session, plan: Plan, ops: list) -> None:  # noqa: ANN
                     image_url=item.chosen.image_url,
                     price=item.chosen.price,
                 )
+        elif op.op == "confirm" and item.chosen is not None:
+            # "Keep this one" on an unsure pick: clear the flag and remember the
+            # product for this food, like a swap, so it's the usual next time.
+            item.pick_confidence = None
+            await memory.record_swap(
+                session,
+                plan.user_id,
+                search_term=item.search_term,
+                upc=item.chosen.upc,
+                description=item.chosen.description,
+                size=item.chosen.size,
+                image_url=item.chosen.image_url,
+                price=item.chosen.price,
+            )
         elif op.op == "manual_search" and op.term and location_id:
             item.search_term = op.term
             item.status = ItemStatus.MATCHING

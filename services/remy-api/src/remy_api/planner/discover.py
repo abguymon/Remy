@@ -17,6 +17,7 @@ from urllib.parse import urlparse
 
 from sqlalchemy import select
 
+from remy_api.decisions import jev
 from remy_api.llm.errors import LLMError
 from remy_api.models import Plan, PlanStatus, UserSettings
 from remy_api.planner import deps
@@ -95,6 +96,11 @@ async def _discover_saved(meal: Meal, user_id: str) -> list[Candidate]:
         for row in rows
     ]
     keep = set(range(len(rows)))
+    if jev.enabled("saved_recipes"):
+        try:
+            return _saved_candidates(rows, await _relevant_saved_jev(meal, candidates_in))
+        except jev.JevError as exc:
+            logger.warning("Jev saved-recipe relevance failed for %r; using the LLM: %s", meal.query, exc)
     try:
         out = await deps.get_llm_client().structured(
             saved_recipe_relevance.render(
@@ -111,7 +117,53 @@ async def _discover_saved(meal: Meal, user_id: str) -> list[Candidate]:
         # Relevance is a refinement, not a gate: on LLM failure keep FTS order
         # rather than dropping the whole saved source.
         logger.info("saved relevance filter failed for %r: %s", meal.query, exc)
+    return _saved_candidates(rows, keep)
 
+
+_JEV_YES = 0.5  # P(yes) at or above which a yes/no decision counts as yes
+
+
+async def _relevant_saved_jev(meal: Meal, candidates: list) -> set[int]:
+    """Which saved recipes match the meal: one Jev yes/no per candidate."""
+    query = meal.query or meal.verbatim
+    lines = [f"Meal the user wants to cook: {query}", "", "Saved recipes:"]
+    for i, c in enumerate(candidates):
+        lines.append(f"[{i}] {c.title} — key ingredients: {', '.join(c.key_ingredients[:8])}")
+    if meal.is_specific:
+        ask = "Is saved recipe [{i}] the same dish as the meal, or a very close variant? Shared ingredients alone do not count."
+    else:
+        ask = "Would saved recipe [{i}] be a reasonable way to make this meal?"
+    probs = await jev.yes_no("\n".join(lines), {f"r{i}": ask.format(i=i) for i in range(len(candidates))})
+    return {i for i in range(len(candidates)) if probs[f"r{i}"] >= _JEV_YES}
+
+
+async def _single_recipe_pages_jev(query: str, candidates: list) -> set[int]:
+    """Which search results to offer: two Jev yes/no questions per result.
+
+    Mirrors what the P3 prompt does in practice: keep a result only if it's an
+    importable single-recipe web page *and* a recipe for the meal searched for.
+    """
+    lines = [f"Recipe search for: {query}", "", "Search results:"]
+    for i, c in enumerate(candidates):
+        lines.append(f"[{i}] {c.title} — {c.url}\n    {c.snippet}")
+    page = (
+        "Is search result [{i}] a web page with one specific recipe a cook could follow? Answer no for "
+        "roundups or lists of recipes, category or tag pages, videos, social media or forum posts, "
+        "comment pages, and articles that aren't a recipe."
+    )
+    match = (
+        "Is search result [{i}] a recipe for the dish searched for (the same dish or a close variant), "
+        "rather than a different dish?"
+    )
+    questions = {}
+    for i in range(len(candidates)):
+        questions[f"page{i}"] = page.format(i=i)
+        questions[f"match{i}"] = match.format(i=i)
+    probs = await jev.yes_no("\n".join(lines), questions)
+    return {i for i in range(len(candidates)) if probs[f"page{i}"] >= _JEV_YES and probs[f"match{i}"] >= _JEV_YES}
+
+
+def _saved_candidates(rows: list[dict], keep: set[int]) -> list[Candidate]:
     return [
         Candidate(
             id=f"saved:{row['id']}",
@@ -190,7 +242,17 @@ async def _discover_web(meal: Meal, favorite_sites: list[str]) -> list[Candidate
     search_cands = [listicle_filter.SearchCandidate(title=r.title, url=r.url, snippet=r.snippet) for r, _ in pairs]
     survivors, _dropped = listicle_filter.prefilter_listicles(search_cands)
     keep = set(survivors)
-    if survivors:
+    jev_done = False
+    if survivors and jev.enabled("listicles"):
+        try:
+            kept_local = await _single_recipe_pages_jev(
+                meal.query or meal.verbatim, [search_cands[i] for i in survivors]
+            )
+            keep = {survivors[i] for i in kept_local}
+            jev_done = True
+        except jev.JevError as exc:
+            logger.warning("Jev listicle filter failed for %r; using the LLM: %s", meal.query, exc)
+    if survivors and not jev_done:
         try:
             out = await deps.get_llm_client().structured(
                 listicle_filter.render(

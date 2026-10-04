@@ -290,7 +290,7 @@ class ListEditRequest(BaseModel):
 
 
 class CartEdit(BaseModel):
-    op: str = Field(description="'swap' | 'drop' | 'set_count' | 'manual_search' | 'add_upc'")
+    op: str = Field(description="'swap' | 'drop' | 'set_count' | 'manual_search' | 'add_upc' | 'confirm'")
     # ``item_id`` targets an existing cart line; ``add_upc`` targets no line (it
     # appends one) so it is optional.
     item_id: str | None = None

@@ -257,6 +257,20 @@ For split-origin local dev (web and API on different origins), set
 `WEB_APP_URL=http://localhost:3000` in the API env so the OAuth-return redirect
 resolves correctly.
 
+### Jev (optional typed decisions)
+
+With a [TypeSafe](https://console.typesafe.ai) key in `TYPESAFE_API_KEY`, set
+`JEV_STEPS=products,listicles,saved_recipes` to use Jev instead of the LLM for
+picking store products, filtering recipe search results, and matching saved
+recipes. It's several times faster, and product picks carry a confidence:
+unsure ones are flagged "Not sure — check this" in cart review. Any Jev failure
+falls back to the LLM. To compare on your own history:
+
+```bash
+docker compose run --rm --no-deps remy-api python scripts/eval_product_ranking.py
+docker compose run --rm --no-deps remy-api python scripts/eval_discovery_decisions.py
+```
+
 ## MCP client connection
 
 `remy-api` mounts an MCP facade (streamable-HTTP transport) that exposes the

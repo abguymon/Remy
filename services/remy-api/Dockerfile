@@ -10,6 +10,8 @@ RUN pip install uv
 COPY pyproject.toml README.md ./
 COPY src/ src/
 RUN uv pip install --system -e .
+# Maintenance/eval scripts (e.g. scripts/eval_product_ranking.py)
+COPY scripts/ scripts/
 
 # Data volume (SQLite DB, recipe images) lives here
 RUN mkdir -p data

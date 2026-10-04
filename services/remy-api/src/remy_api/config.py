@@ -96,15 +96,21 @@ class Settings(BaseSettings):
     # In the compose stack this is the internal service: http://searxng:8080
     searxng_url: str = ""
 
-    # --- Product ranking (picking among a store's search results) ---
-    # "llm" = the P5 ranking prompt; "jev" = TypeSafe Jev typed choice, which
-    # also yields a calibrated confidence for the pick (falls back to the LLM on
-    # any Jev failure).
-    product_ranker: str = "llm"
+    # --- TypeSafe Jev (typed decisions beside the LLM) ---
+    # Comma-separated steps that use Jev instead of their LLM prompt:
+    #   products       pick among a store's search results (+ a confidence per pick)
+    #   listicles      drop roundup pages from recipe web-search results
+    #   saved_recipes  decide which saved recipes match a meal
+    # Each falls back to its LLM prompt if Jev fails. Empty = LLM everywhere.
+    jev_steps: str = ""
     typesafe_api_key: str = ""
     typesafe_base_url: str = "https://api.typesafe.ai"
     jev_model: str = "jev-latest"
     jev_timeout: float = 10.0
+
+    @property
+    def jev_step_set(self) -> set[str]:
+        return {s.strip() for s in self.jev_steps.split(",") if s.strip()}
 
     # --- MCP facade ---
     mcp_facade_enabled: bool = True
