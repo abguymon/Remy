@@ -69,7 +69,7 @@ export function Spinner({ className = '' }: { className?: string }) {
 }
 
 // --- Step indicator (5 steps, tappable-back) -------------------------------
-// A segmented progress bar (cook-mode style) with labels; each segment is a
+// A segmented progress bar with labels; each segment is a
 // ≥44px-tall button so reachable steps stay tappable.
 
 const STEPS = ['Plan', 'Pick', 'List', 'Cart', 'Done']

@@ -94,6 +94,13 @@ export function useCreatePlan() {
   return usePlanMutation((text: string) => api.post<PlanSnapshot>('/plan', { text }))
 }
 
+// "Order groceries" for this week's recipes: a plan that starts at list review.
+export function useCreatePlanFromRecipes() {
+  return usePlanMutation((recipeIds: string[]) =>
+    api.post<PlanSnapshot>('/plan/from-recipes', { recipe_ids: recipeIds }),
+  )
+}
+
 export function useSubmitSelection() {
   return usePlanMutation((choices: MealChoice[]) =>
     api.post<PlanSnapshot>('/plan/select', { choices }),
@@ -193,15 +200,22 @@ export function useUpdateRecipe(id: string) {
     // heart and stars respond instantly; a failure rolls back.
     onMutate: async (body) => {
       await qc.cancelQueries({ queryKey: ['recipe', id] })
+      await qc.cancelQueries({ queryKey: ['recipes'] })
       const prev = qc.getQueryData<RecipeDetail>(['recipe', id])
-      if (prev) {
-        const { ingredients: _ignored, ...fields } = body
-        qc.setQueryData<RecipeDetail>(['recipe', id], { ...prev, ...fields } as RecipeDetail)
+      const prevLists = qc.getQueriesData<unknown>({ queryKey: ['recipes'] })
+      const { ingredients: _ignored, ...fields } = body
+      if (prev) qc.setQueryData<RecipeDetail>(['recipe', id], { ...prev, ...fields } as RecipeDetail)
+      // Cookbook grids/shelves too, so card toggles (this week, favorite) feel instant.
+      for (const [key, data] of prevLists) {
+        if (Array.isArray(data) && data.some((r) => r?.id === id)) {
+          qc.setQueryData(key, data.map((r) => (r.id === id ? { ...r, ...fields } : r)))
+        }
       }
-      return { prev }
+      return { prev, prevLists }
     },
     onError: (_err, _body, ctx) => {
       if (ctx?.prev) qc.setQueryData(['recipe', id], ctx.prev)
+      for (const [key, data] of ctx?.prevLists ?? []) qc.setQueryData(key, data)
     },
     onSuccess: (recipe) => {
       qc.setQueryData(['recipe', id], recipe)

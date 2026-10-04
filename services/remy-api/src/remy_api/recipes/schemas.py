@@ -122,6 +122,7 @@ class RecipeSummary(BaseModel):
     is_favorite: bool = False
     rating: int | None = None
     tags: list[str] = Field(default_factory=list)
+    this_week: bool = False
 
 
 class RecipeDetail(RecipeSummary):
@@ -190,6 +191,7 @@ class RecipeUpdate(BaseModel):
     rating: int | None = Field(default=None, ge=1, le=5)
     notes: str | None = Field(default=None, max_length=MAX_NOTES_LENGTH)
     tags: list[str] | None = None
+    this_week: bool | None = None  # queue for / remove from this week's cooking
 
     @field_validator("title")
     @classmethod

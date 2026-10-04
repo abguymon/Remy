@@ -260,6 +260,10 @@ class PlanCreate(BaseModel):
     text: str = Field(min_length=1)
 
 
+class PlanFromRecipes(BaseModel):
+    recipe_ids: list[str] = Field(min_length=1, max_length=30)
+
+
 class MealChoice(BaseModel):
     meal_id: str
     choice: str = Field(description="'candidate' | 'url' | 'skip'")

@@ -1,6 +1,7 @@
 // Cookbook (DESIGN_BRIEF §4.7, visual language v2 §8) — browse register.
-// Serif title + round add button, search, then client-derived shelves
-// ("Cook again", "Recently added", "On the table in 30 minutes") above the full
+// Serif title + round add button, search, then a "This week" queue (order its
+// groceries in one go) and client-derived shelves ("Cook again", "Recently
+// added", "On the table in 30 minutes") above the full
 // photo grid. Filter chips (Favorites + the most-used tags, via ?fav=1 / ?tag=)
 // narrow the grid; shelves hide while searching or filtering. "Add a recipe"
 // opens a sheet that imports from a URL or photos/PDF with parse progress.
@@ -12,6 +13,7 @@ import { pluralize, shortDate } from '../lib/format'
 import { useCreateRecipeFromUpload, useCreateRecipeFromUrl, useRecipeTags, useRecipes } from '../lib/queries'
 import type { RecipeDetail, RecipeSummary } from '../lib/types'
 import Icon from '../components/Icon'
+import { ThisWeekBadge, useOrderGroceries } from '../components/ThisWeek'
 import {
   AuthedImage,
   Button,
@@ -84,6 +86,8 @@ export default function Cookbook() {
   }, [recipes.data, favFilter, tagFilter])
   const allItems = useMemo(() => all.data ?? [], [all.data])
   const favCount = allItems.filter((r) => r.is_favorite).length
+  const thisWeek = allItems.filter((r) => r.this_week)
+  const groceries = useOrderGroceries()
   const isSearching = search.trim().length > 0
   const chipTags = (tags.data ?? []).slice(0, FILTER_TAGS).map((t) => t.name)
   if (tagFilter && !chipTags.some((t) => t.toLowerCase() === tagFilter.toLowerCase())) chipTags.unshift(tagFilter)
@@ -235,6 +239,44 @@ export default function Cookbook() {
         </div>
       ) : (
         <>
+          {!isSearching && !filtering && thisWeek.length > 0 && (
+            <section aria-labelledby="sh-week" className="mx-5 mt-[22px] rounded-panel border border-line bg-surface pb-4 pt-4">
+              <SectionHeading
+                id="sh-week"
+                className="px-4"
+                sub={`${pluralize(thisWeek.length, 'recipe')} you plan to cook`}
+              >
+                This week
+              </SectionHeading>
+              <div className="no-scrollbar flex gap-3 overflow-x-auto px-4 pb-1 pt-3">
+                {thisWeek.map((r) => (
+                  <div key={r.id} className="relative w-[124px] flex-none">
+                    <button onClick={() => open(r.id)} className="block w-full text-left">
+                      <div className="h-[100px] overflow-hidden rounded-[12px] bg-tile">
+                        <AuthedImage path={r.image_url} alt="" label="recipe photo" />
+                      </div>
+                      <div className="mt-1.5 line-clamp-2 font-serif text-[14.5px] font-medium leading-[1.2] text-ink">
+                        {r.title}
+                      </div>
+                    </button>
+                    <ThisWeekBadge recipe={r} className="absolute right-1.5 top-1.5 !h-8 !w-8" />
+                  </div>
+                ))}
+              </div>
+              <div className="px-4 pt-3">
+                <Button
+                  className="h-[50px] w-full text-[15.5px]"
+                  busy={groceries.pending}
+                  busyLabel="Building your list…"
+                  onClick={() => groceries.order(thisWeek.map((r) => r.id))}
+                >
+                  <Icon name="cart" size={18} strokeWidth={2.2} />
+                  Order groceries for {pluralize(thisWeek.length, 'recipe')}
+                </Button>
+              </div>
+            </section>
+          )}
+
           {showShelves && shelves.again.length > 0 && (
             <Shelf title="Cook again" sub="Favorites and past hits you haven't made lately">
               {shelves.again.map((r) => (
@@ -373,26 +415,29 @@ function CardGrid({ children }: { children: ReactNode }) {
 function RecipeCard({ recipe, onOpen }: { recipe: RecipeSummary; onOpen: () => void }) {
   const meta = metaLine(recipe)
   return (
-    <button onClick={onOpen} className="group min-w-0 cursor-pointer self-start text-left">
-      <div className="relative aspect-[4/3] overflow-hidden rounded-[14px] bg-tile">
-        <AuthedImage
-          path={recipe.image_url}
-          alt=""
-          label="recipe photo"
-          className="transition-transform duration-300 group-hover:scale-[1.03]"
-        />
-        {recipe.is_favorite && (
-          <span className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-surface/85 text-terracotta backdrop-blur">
-            <Icon name="heart" size={14} filled strokeWidth={0} />
-            <span className="sr-only">Favorite</span>
-          </span>
-        )}
-      </div>
-      <div className="mt-2 line-clamp-2 font-serif text-[15.5px] font-medium leading-[1.22] text-ink">
-        {recipe.title}
-      </div>
-      {meta && <div className="mt-[3px] truncate text-[12.5px] text-muted">{meta}</div>}
-    </button>
+    <div className="relative min-w-0 self-start">
+      <button onClick={onOpen} className="group block w-full cursor-pointer text-left">
+        <div className="relative aspect-[4/3] overflow-hidden rounded-[14px] bg-tile">
+          <AuthedImage
+            path={recipe.image_url}
+            alt=""
+            label="recipe photo"
+            className="transition-transform duration-300 group-hover:scale-[1.03]"
+          />
+          {recipe.is_favorite && (
+            <span className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-surface/85 text-terracotta backdrop-blur">
+              <Icon name="heart" size={14} filled strokeWidth={0} />
+              <span className="sr-only">Favorite</span>
+            </span>
+          )}
+        </div>
+        <div className="mt-2 line-clamp-2 font-serif text-[15.5px] font-medium leading-[1.22] text-ink">
+          {recipe.title}
+        </div>
+        {meta && <div className="mt-[3px] truncate text-[12.5px] text-muted">{meta}</div>}
+      </button>
+      <ThisWeekBadge recipe={recipe} className="absolute left-2 top-2" />
+    </div>
   )
 }
 

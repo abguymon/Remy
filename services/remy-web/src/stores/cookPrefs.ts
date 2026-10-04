@@ -1,5 +1,5 @@
-// Per-recipe scale + unit choice, shared by the recipe page and cook mode so
-// "Start cooking" opens at the servings you just picked. Session-only.
+// Per-recipe scale + unit choice for the ingredient list, kept for the session
+// so leaving and returning to a recipe keeps the servings you picked.
 import { create } from 'zustand'
 import type { UnitSystem } from '../lib/ingredients'
 

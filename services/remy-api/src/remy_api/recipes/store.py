@@ -264,7 +264,14 @@ _NON_NULLABLE = {"title", "instructions", "is_favorite", "tags"}
 
 
 def _apply_updates(recipe: Recipe, updates: RecipeUpdate) -> None:
+    from remy_api.models import _now  # local import to reuse the model clock
+
     data = updates.model_dump(exclude_unset=True, exclude={"ingredients"})
+    this_week = data.pop("this_week", None)
+    if this_week is True and recipe.this_week_at is None:
+        recipe.this_week_at = _now()
+    elif this_week is False:
+        recipe.this_week_at = None
     for field, value in data.items():
         if value is None and field in _NON_NULLABLE:
             continue
@@ -312,6 +319,7 @@ async def mark_cooked(session: AsyncSession, user_id: str, recipe_id: str) -> Re
     recipe = await get_recipe(session, user_id, recipe_id)
     recipe.last_cooked_at = _now()
     recipe.cooked_count = (recipe.cooked_count or 0) + 1
+    recipe.this_week_at = None  # cooked → off this week's list
     await session.commit()
     await session.refresh(recipe)
     return recipe

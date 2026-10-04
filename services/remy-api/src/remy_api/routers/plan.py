@@ -21,6 +21,7 @@ from remy_api.planner.schemas import (
     CartEditRequest,
     ListEditRequest,
     PlanCreate,
+    PlanFromRecipes,
     PlanSnapshot,
     RetryRequest,
     SelectRequest,
@@ -33,6 +34,13 @@ router = APIRouter(prefix="/plan", tags=["plan"])
 @router.post("", response_model=PlanSnapshot, status_code=status.HTTP_201_CREATED)
 async def create_plan(payload: PlanCreate, user: CurrentUser, session: SessionDep) -> PlanSnapshot:
     plan = await machine.create_plan(session, user, payload.text)
+    return machine.snapshot(plan)
+
+
+@router.post("/from-recipes", response_model=PlanSnapshot, status_code=status.HTTP_201_CREATED)
+async def create_plan_from_recipes(payload: PlanFromRecipes, user: CurrentUser, session: SessionDep) -> PlanSnapshot:
+    """Order groceries for saved recipes: a plan that starts at list review."""
+    plan = await machine.create_plan_from_recipes(session, user, payload.recipe_ids)
     return machine.snapshot(plan)
 
 

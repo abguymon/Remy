@@ -2,14 +2,15 @@
 // editorial screen. Tall photo with glass back button, a cream sheet that
 // overlaps it, serif title, source link, a stat strip, then ingredients (tap to
 // tick off while cooking — local only; scaled + US/metric via ScaleControls)
-// and big-numeral method steps. Actions: "Start cooking" (cook mode), "I cooked
-// this" (stamps last_cooked_at), edit (sheet → PUT), delete (confirm), original.
+// and big-numeral method steps. Actions: "Cook this week" (queue for ordering),
+// "Cooked it" (stamps last_cooked_at), edit (sheet → PUT), delete (confirm).
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { pluralize, shortDate } from '../lib/format'
 import { groupBySection, ingredientsToText, renderIngredient, sectionTitle, textToIngredients } from '../lib/ingredients'
 import ScaleControls, { useScale } from '../components/ScaleControls'
+import { useThisWeekToggle } from '../components/ThisWeek'
 import { FavoriteButton, NotesCard, StarRating, TagRow } from '../components/RecipeLibrary'
 import { useDeleteRecipe, useMarkCooked, useRecipe, useUpdateRecipe } from '../lib/queries'
 import type { RecipeDetail as Recipe } from '../lib/types'
@@ -49,6 +50,7 @@ export default function RecipeDetail() {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [ticked, setTicked] = useState<Set<string>>(() => new Set())
   const scale = useScale(recipe.data)
+  const toggleThisWeek = useThisWeekToggle(recipe.data ?? { id: id ?? '', this_week: false })
 
   const back = () => navigate('/app/cookbook')
 
@@ -174,16 +176,18 @@ export default function RecipeDetail() {
           </dl>
         )}
 
-        {r.instructions.length > 0 && (
-          <Button
-            className="mt-4 h-[54px] w-full !rounded-card text-[16.5px] font-bold"
-            onClick={() => navigate(`/app/cookbook/${r.id}/cook`)}
-          >
-            <Icon name="play" size={19} filled strokeWidth={0} />
-            Start cooking
-          </Button>
-        )}
-        <div className={`mt-2.5 grid gap-2.5 ${r.source_url ? 'grid-cols-3' : 'grid-cols-2'}`}>
+        <Button
+          variant={r.this_week ? 'secondary' : 'primary'}
+          aria-pressed={r.this_week}
+          className={`mt-4 h-[54px] w-full !rounded-card text-[16.5px] font-bold ${
+            r.this_week ? '!border-terracotta/50 !text-terracotta-deep' : ''
+          }`}
+          onClick={toggleThisWeek}
+        >
+          <Icon name={r.this_week ? 'check' : 'plan'} size={19} strokeWidth={2.4} />
+          {r.this_week ? "On this week's list" : 'Cook this week'}
+        </Button>
+        <div className="mt-2.5 grid grid-cols-2 gap-2.5">
           <Button
             variant="secondary"
             className="h-[46px] !border-line px-2 text-[14px]"
@@ -205,17 +209,6 @@ export default function RecipeDetail() {
             <Icon name="edit" size={17} strokeWidth={2} />
             Edit
           </Button>
-          {r.source_url && (
-            <a
-              href={r.source_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex h-[46px] items-center justify-center gap-2 rounded-[14px] border border-line bg-surface px-2 text-[14px] font-semibold text-ink hover:bg-cream"
-            >
-              <Icon name="external" size={17} strokeWidth={2} />
-              Original
-            </a>
-          )}
         </div>
         <div className="mt-2.5 text-center text-[13px] text-muted">
           {r.last_cooked_at

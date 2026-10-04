@@ -31,6 +31,7 @@ from remy_api.models import Plan, PlanStatus, User, UserSettings
 from remy_api.observability import bind_observation_context
 from remy_api.planner import deps, discover, execute, listing, matching, select_step
 from remy_api.planner.schemas import (
+    Candidate,
     CartState,
     ExecutionState,
     ItemStatus,
@@ -38,8 +39,11 @@ from remy_api.planner.schemas import (
     MatchStage,
     Meal,
     MealCandidates,
+    MealStatus,
+    Origin,
     PlanSnapshot,
     SelectionState,
+    SelectionStatus,
 )
 from remy_api.prompts import meal_extraction
 
@@ -160,6 +164,67 @@ async def create_plan(session: AsyncSession, user: User, text: str) -> Plan:
     if meals:
         _launch(user.id, plan_id, discover.run_discover(plan_id))
     return plan
+
+
+async def create_plan_from_recipes(session: AsyncSession, user: User, recipe_ids: list[str]) -> Plan:
+    """Start a plan from saved recipes ("cook this week"), straight to list review.
+
+    Each recipe becomes a meal whose only candidate is that recipe, already
+    selected, so discovery and selection are skipped and the shopping list is
+    built immediately.
+    """
+    async with _lock(user.id):
+        active = await get_active_plan(session, user.id)
+        if active is not None and not _needs_input(active):
+            raise ConflictError(
+                f"You already have a plan in progress (status '{active.status}').",
+                code="plan_active",
+            )
+
+        recipes = []
+        for recipe_id in dict.fromkeys(recipe_ids):  # de-dupe, keep order
+            recipes.append(await deps.get_recipe(session, user.id, recipe_id))
+
+        meals: list[dict] = []
+        candidates: dict[str, dict] = {}
+        selections: dict[str, dict] = {}
+        for recipe in recipes:
+            meal_id = uuid.uuid4().hex
+            candidate = Candidate(
+                id=f"saved-{recipe.id}",
+                title=recipe.title,
+                url=recipe.source_url,
+                saved_recipe_id=recipe.id,
+                total_time=recipe.total_time,
+                origin=Origin.SAVED,
+                preselected=True,
+            )
+            meals.append(Meal(id=meal_id, query=recipe.title, verbatim=recipe.title).model_dump(mode="json"))
+            candidates[meal_id] = MealCandidates(
+                meal_id=meal_id, status=MealStatus.READY, candidates=[candidate]
+            ).model_dump(mode="json")
+            selections[meal_id] = SelectionState(
+                meal_id=meal_id,
+                choice="candidate",
+                candidate_id=candidate.id,
+                recipe_id=recipe.id,
+                recipe_title=recipe.title,
+                status=SelectionStatus.SAVED,
+            ).model_dump(mode="json")
+
+        if active is not None:  # replace an empty needs-input plan in place
+            plan = active
+            plan.list_lines = plan.matches = plan.execution_results = None
+        else:
+            plan = Plan(id=str(uuid.uuid4()), user_id=user.id, status=PlanStatus.REVIEWING_LIST)
+            session.add(plan)
+        plan.status = PlanStatus.REVIEWING_LIST
+        plan.meals, plan.candidates, plan.selections = meals, candidates, selections
+        with bind_observation_context(user_id=user.id, session_id=plan.id):
+            await listing.build_list(session, plan)
+        await session.commit()
+        await session.refresh(plan)
+        return plan
 
 
 # --- select ------------------------------------------------------------------

@@ -528,3 +528,46 @@ async def test_resume_snapshot_fidelity_midflow(env):
     assert resumed["status"] == "reviewing_list"
     foods = {ln["food"] for ln in resumed["shopping_list"]["lines"]}
     assert {"onion", "salt", "sliced almond", "black bean"} <= foods
+
+
+async def test_plan_from_this_weeks_recipes_starts_at_list_review(env):
+    """Queue saved recipes for this week, then order them: list built, no discovery."""
+    client, headers, user_id = env["client"], env["headers"], env["user_id"]
+    factory = get_session_factory()
+    ids = []
+    async with factory() as s:
+        for title, lines in [("Curry", ["1 onion", "1 lb chicken thighs"]), ("Soup", ["2 onions", "1 tsp salt"])]:
+            recipe = await store.create_recipe(
+                s,
+                user_id,
+                ParsedRecipe(title=title, ingredients=[ParsedIngredient(raw=x) for x in lines], instructions=["Cook."]),
+            )
+            ids.append(recipe.id)
+
+    for rid in ids:
+        resp = await client.put(f"/recipes/{rid}", json={"this_week": True}, headers=headers)
+        assert resp.json()["this_week"] is True
+    queued = [r["id"] for r in (await client.get("/recipes", headers=headers)).json() if r["this_week"]]
+    assert sorted(queued) == sorted(ids)
+
+    created = await client.post("/plan/from-recipes", json={"recipe_ids": ids}, headers=headers)
+    assert created.status_code == 201, created.text
+    snap = created.json()
+    assert snap["status"] == "reviewing_list"
+    assert [s["recipe_title"] for s in snap["selections"].values()] == ["Curry", "Soup"]
+    foods = {line["food"] for line in snap["shopping_list"]["lines"]}
+    assert {"onion", "chicken thigh", "salt"} <= foods
+
+    # One active plan at a time.
+    again = await client.post("/plan/from-recipes", json={"recipe_ids": ids}, headers=headers)
+    assert again.status_code == 409
+
+    # Cooking a recipe takes it off this week's list.
+    cooked = await client.post(f"/recipes/{ids[0]}/cooked", headers=headers)
+    assert cooked.json()["this_week"] is False
+
+
+async def test_plan_from_recipes_rejects_unknown_recipe(env):
+    client, headers = env["client"], env["headers"]
+    resp = await client.post("/plan/from-recipes", json={"recipe_ids": ["nope"]}, headers=headers)
+    assert resp.status_code == 404

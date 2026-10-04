@@ -262,6 +262,7 @@ export interface RecipeSummary {
   is_favorite: boolean
   rating: number | null // 1..5
   tags: string[]
+  this_week: boolean // queued to cook (and order groceries for) this week
 }
 
 export interface TagCount {
@@ -303,6 +304,7 @@ export interface RecipeUpdate {
   rating?: number | null
   notes?: string | null
   tags?: string[]
+  this_week?: boolean
 }
 
 // --- orders (T8: cart-as-record) ---

@@ -178,6 +178,9 @@ class Recipe(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Free-form tags ("weeknight", "Thai"), case-insensitively unique per recipe.
     tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    # "Cooking this week": set when the user queues the recipe, cleared when it's
+    # marked cooked. Queued recipes can be ordered together as one plan.
+    this_week_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     user: Mapped[User] = relationship(back_populates="recipes")
     ingredients: Mapped[list[RecipeIngredient]] = relationship(

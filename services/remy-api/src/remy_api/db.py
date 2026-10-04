@@ -104,6 +104,7 @@ def _apply_additive_migrations(conn) -> None:  # noqa: ANN001
         ("recipes", "rating", "INTEGER"),
         ("recipes", "notes", "TEXT"),
         ("recipes", "tags", "JSON NOT NULL DEFAULT '[]'"),
+        ("recipes", "this_week_at", "DATETIME"),
         ("recipe_ingredients", "section", "VARCHAR(255)"),
         ("recipe_ingredients", "alt_raw", "TEXT"),
     ]

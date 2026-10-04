@@ -1,15 +1,17 @@
 // Plan step 0 — the emotional start (DESIGN_BRIEF §4.2). Meal input, first-run
 // explainer, Kroger-not-connected notice, resume card for an in-flight plan,
-// and the needs_input reprompt.
+// the needs_input reprompt, and a shortcut to order this week's queued recipes.
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError } from '../../lib/api'
-import { useAbandonPlan, useCreatePlan, useKrogerStatus } from '../../lib/queries'
+import { useAbandonPlan, useCreatePlan, useKrogerStatus, useRecipes } from '../../lib/queries'
 import type { PlanSnapshot } from '../../lib/types'
 import { toast } from '../../stores/toast'
 import { Button, ConfirmDialog, DegradedBanner, ScreenHeader, SectionLabel } from '../../components/ui'
 import Icon from '../../components/Icon'
 import type { IconName } from '../../components/Icon'
+import { useOrderGroceries } from '../../components/ThisWeek'
+import { pluralize } from '../../lib/format'
 
 const HOW_IT_WORKS: { icon: IconName; text: string }[] = [
   { icon: 'utensils', text: 'Pick a recipe for each meal from ~5 options.' },
@@ -41,6 +43,9 @@ export default function Step0Input({
   const createPlan = useCreatePlan()
   const abandon = useAbandonPlan()
   const krogerQuery = useKrogerStatus()
+  const recipes = useRecipes('')
+  const thisWeek = (recipes.data ?? []).filter((r) => r.this_week)
+  const groceries = useOrderGroceries()
 
   const status = snapshot?.status
   const needsInput = !!snapshot?.needs_input
@@ -148,6 +153,35 @@ export default function Step0Input({
               </Link>
               .
             </DegradedBanner>
+          </div>
+        )}
+
+        {thisWeek.length > 0 && (
+          <div className="mb-5 rounded-card border border-line bg-surface p-4">
+            <SectionLabel>From your cookbook</SectionLabel>
+            <div className="mt-1.5 font-serif text-[19px] font-medium leading-snug text-ink">
+              {pluralize(thisWeek.length, 'recipe')} on this week's list
+            </div>
+            <div className="mt-1 line-clamp-2 text-[13.5px] text-muted">
+              {thisWeek.map((r) => r.title).join(' · ')}
+            </div>
+            <div className="mt-3 flex gap-2.5">
+              <Button
+                className="h-12 flex-[2] text-[15px]"
+                busy={groceries.pending}
+                busyLabel="Building your list…"
+                onClick={() => groceries.order(thisWeek.map((r) => r.id))}
+              >
+                <Icon name="cart" size={17} strokeWidth={2.2} />
+                Order groceries
+              </Button>
+              <Link
+                to="/app/cookbook"
+                className="inline-flex h-12 flex-1 items-center justify-center rounded-[14px] border border-line2 bg-surface text-[14px] font-semibold text-ink hover:bg-cream"
+              >
+                Edit list
+              </Link>
+            </div>
           </div>
         )}
 

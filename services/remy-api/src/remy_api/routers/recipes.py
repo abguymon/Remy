@@ -54,6 +54,7 @@ def _summary_fields(recipe: Recipe) -> dict:
         "is_favorite": bool(recipe.is_favorite),
         "rating": recipe.rating,
         "tags": list(recipe.tags or []),
+        "this_week": recipe.this_week_at is not None,
     }
 
 
