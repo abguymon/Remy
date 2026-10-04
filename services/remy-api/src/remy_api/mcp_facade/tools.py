@@ -391,6 +391,9 @@ def build_mcp_server() -> FastMCP:
                         "source_url": r.source_url,
                         "total_time": r.total_time,
                         "last_cooked_at": r.last_cooked_at.isoformat() if r.last_cooked_at else None,
+                        "is_favorite": bool(r.is_favorite),
+                        "rating": r.rating,
+                        "tags": list(r.tags or []),
                     }
                     for r in recipes
                 ]
@@ -412,6 +415,11 @@ def build_mcp_server() -> FastMCP:
                 "ingredients": [ing.raw for ing in recipe.ingredients],
                 "instructions": list(recipe.instructions or []),
                 "last_cooked_at": recipe.last_cooked_at.isoformat() if recipe.last_cooked_at else None,
+                "cooked_count": recipe.cooked_count or 0,
+                "is_favorite": bool(recipe.is_favorite),
+                "rating": recipe.rating,
+                "tags": list(recipe.tags or []),
+                "notes": recipe.notes,
             }
 
     @mcp.tool(

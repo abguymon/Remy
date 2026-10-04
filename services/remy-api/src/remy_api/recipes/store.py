@@ -88,10 +88,11 @@ async def _ensure_fts(session: AsyncSession) -> bool:
 
 
 def _fts_document(recipe: Recipe) -> str:
-    """The searchable ingredient text: parsed food names, else raw lines."""
+    """The searchable text beside the title: parsed food names (else raw lines) and tags."""
     parts: list[str] = []
     for ing in recipe.ingredients:
         parts.append(ing.food or ing.raw)
+    parts.extend(recipe.tags or [])  # so searching "weeknight" finds tagged recipes
     return " ".join(p for p in parts if p)
 
 
@@ -185,6 +186,23 @@ async def list_recipes(session: AsyncSession, user_id: str, *, limit: int = 50, 
     return list(rows.scalars().all())
 
 
+async def tag_counts(session: AsyncSession, user_id: str) -> list[tuple[str, int]]:
+    """Every tag in the user's cookbook with its recipe count, most-used first.
+
+    Tags are matched case-insensitively; the most common spelling is shown.
+    """
+    rows = await session.execute(select(Recipe.tags).where(Recipe.user_id == user_id))
+    counts: dict[str, int] = {}
+    spellings: dict[str, dict[str, int]] = {}
+    for (tags,) in rows.all():
+        for tag in tags or []:
+            key = tag.casefold()
+            counts[key] = counts.get(key, 0) + 1
+            spellings.setdefault(key, {})[tag] = spellings.get(key, {}).get(tag, 0) + 1
+    named = [(max(spellings[k].items(), key=lambda kv: kv[1])[0], n) for k, n in counts.items()]
+    return sorted(named, key=lambda t: (-t[1], t[0].casefold()))
+
+
 async def search_recipes(
     session: AsyncSession,
     query: str,
@@ -237,9 +255,15 @@ async def search_recipes(
     return list(rows.scalars().all())
 
 
+# Columns that are NOT NULL: an explicit null in a PATCH-style update is ignored.
+_NON_NULLABLE = {"title", "instructions", "is_favorite", "tags"}
+
+
 def _apply_updates(recipe: Recipe, updates: RecipeUpdate) -> None:
     data = updates.model_dump(exclude_unset=True, exclude={"ingredients"})
     for field, value in data.items():
+        if value is None and field in _NON_NULLABLE:
+            continue
         setattr(recipe, field, value)
 
 
@@ -274,11 +298,12 @@ async def update_recipe(
 
 
 async def mark_cooked(session: AsyncSession, user_id: str, recipe_id: str) -> Recipe:
-    """Stamp ``last_cooked_at`` = now (FR-20)."""
+    """Stamp ``last_cooked_at`` = now and bump ``cooked_count`` (FR-20)."""
     from remy_api.models import _now  # local import to reuse the model clock
 
     recipe = await get_recipe(session, user_id, recipe_id)
     recipe.last_cooked_at = _now()
+    recipe.cooked_count = (recipe.cooked_count or 0) + 1
     await session.commit()
     await session.refresh(recipe)
     return recipe

@@ -99,6 +99,11 @@ def _apply_additive_migrations(conn) -> None:  # noqa: ANN001
         ("user_settings", "store_chain", "VARCHAR(64)"),
         ("users", "is_admin", "BOOLEAN NOT NULL DEFAULT 0"),
         ("users", "auth_version", "INTEGER NOT NULL DEFAULT 0"),
+        ("recipes", "cooked_count", "INTEGER NOT NULL DEFAULT 0"),
+        ("recipes", "is_favorite", "BOOLEAN NOT NULL DEFAULT 0"),
+        ("recipes", "rating", "INTEGER"),
+        ("recipes", "notes", "TEXT"),
+        ("recipes", "tags", "JSON NOT NULL DEFAULT '[]'"),
     ]
     for table, column, ddl_type in additions:
         if table not in tables:
@@ -106,6 +111,9 @@ def _apply_additive_migrations(conn) -> None:  # noqa: ANN001
         existing = {c["name"] for c in inspector.get_columns(table)}
         if column not in existing:
             conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}")
+            if (table, column) == ("recipes", "cooked_count"):
+                # Recipes stamped before the counter existed were cooked at least once.
+                conn.exec_driver_sql("UPDATE recipes SET cooked_count = 1 WHERE last_cooked_at IS NOT NULL")
 
 
 async def init_db() -> None:

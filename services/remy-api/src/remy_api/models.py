@@ -171,6 +171,13 @@ class Recipe(Base):
     instructions: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
     last_cooked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Library features (COOKBOOK_PLAN v1): per-user, like the recipe itself.
+    cooked_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_favorite: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    rating: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1..5, null = unrated
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Free-form tags ("weeknight", "Thai"), case-insensitively unique per recipe.
+    tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
 
     user: Mapped[User] = relationship(back_populates="recipes")
     ingredients: Mapped[list[RecipeIngredient]] = relationship(

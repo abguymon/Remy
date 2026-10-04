@@ -1,19 +1,21 @@
 // Cookbook (DESIGN_BRIEF §4.7, visual language v2 §8) — browse register.
 // Serif title + round add button, search, then client-derived shelves
 // ("Cook again", "Recently added", "On the table in 30 minutes") above the full
-// photo grid. Shelves hide while searching. "Add a recipe" opens a sheet that
-// imports from a URL or photos/PDF with parse progress and a parsed preview.
+// photo grid. Filter chips (Favorites + the most-used tags, via ?fav=1 / ?tag=)
+// narrow the grid; shelves hide while searching or filtering. "Add a recipe"
+// opens a sheet that imports from a URL or photos/PDF with parse progress.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../lib/api'
 import { pluralize, shortDate } from '../lib/format'
-import { useCreateRecipeFromUpload, useCreateRecipeFromUrl, useRecipes } from '../lib/queries'
+import { useCreateRecipeFromUpload, useCreateRecipeFromUrl, useRecipeTags, useRecipes } from '../lib/queries'
 import type { RecipeDetail, RecipeSummary } from '../lib/types'
 import Icon from '../components/Icon'
 import {
   AuthedImage,
   Button,
+  Chip,
   DegradedBanner,
   EmptyState,
   IconButton,
@@ -28,6 +30,7 @@ const MAX_UPLOAD_BYTES = 15_000_000
 const SHELF_MIN_RECIPES = 6 // below this the grid alone reads better than shelves
 const QUICK_MINUTES = 30
 const COOK_AGAIN_DAYS = 21
+const FILTER_TAGS = 8 // most-used tags shown as chips; the rest live in Collections
 
 // "cooking.nytimes.com" → "nytimes", "hot-thai-kitchen.com" → "hot-thai-kitchen".
 function sourceName(url: string | null): string {
@@ -61,11 +64,29 @@ export default function Cookbook() {
   const [addOpen, setAddOpen] = useState(false)
   const all = useRecipes('') // unfiltered list → count + shelves (shared cache with the grid)
   const recipes = useRecipes(search)
+  const tags = useRecipeTags()
   const navigate = useNavigate()
+  const [params, setParams] = useSearchParams()
+  const tagFilter = params.get('tag')
+  const favFilter = params.get('fav') === '1'
+  const filtering = !!tagFilter || favFilter
+  const setFilter = (next: { tag?: string; fav?: boolean } | null) =>
+    setParams(next?.tag ? { tag: next.tag } : next?.fav ? { fav: '1' } : {}, { replace: true })
 
-  const items = recipes.data ?? []
+  const items = useMemo(() => {
+    const list = recipes.data ?? []
+    if (favFilter) return list.filter((r) => r.is_favorite)
+    if (tagFilter) {
+      const key = tagFilter.toLowerCase()
+      return list.filter((r) => r.tags.some((t) => t.toLowerCase() === key))
+    }
+    return list
+  }, [recipes.data, favFilter, tagFilter])
   const allItems = useMemo(() => all.data ?? [], [all.data])
+  const favCount = allItems.filter((r) => r.is_favorite).length
   const isSearching = search.trim().length > 0
+  const chipTags = (tags.data ?? []).slice(0, FILTER_TAGS).map((t) => t.name)
+  if (tagFilter && !chipTags.some((t) => t.toLowerCase() === tagFilter.toLowerCase())) chipTags.unshift(tagFilter)
   const open = (id: string) => navigate(`/app/cookbook/${id}`)
 
   const shelves = useMemo(() => {
@@ -79,24 +100,36 @@ export default function Cookbook() {
       .sort((a, b) => a.min - b.min)
       .slice(0, 3)
       .map((x) => x.r)
+    // Favorites and past hits you haven't made lately: favorites first, then
+    // the most-made, then whatever's gone longest.
+    const stale = (r: RecipeSummary) =>
+      !r.last_cooked_at || now - new Date(r.last_cooked_at).getTime() > COOK_AGAIN_DAYS * 86_400_000
     const again = allItems
-      .filter(
-        (r) =>
-          r.last_cooked_at &&
-          now - new Date(r.last_cooked_at).getTime() > COOK_AGAIN_DAYS * 86_400_000,
+      .filter((r) => (r.is_favorite || r.cooked_count > 0) && stale(r))
+      .sort(
+        (a, b) =>
+          Number(b.is_favorite) - Number(a.is_favorite) ||
+          b.cooked_count - a.cooked_count ||
+          (a.last_cooked_at ?? '').localeCompare(b.last_cooked_at ?? ''),
       )
-      .sort((a, b) => (a.last_cooked_at ?? '').localeCompare(b.last_cooked_at ?? ''))
       .slice(0, 6)
     return { recent, quick, again }
   }, [allItems])
 
-  const showShelves = !isSearching && allItems.length >= SHELF_MIN_RECIPES
+  const showShelves = !isSearching && !filtering && allItems.length >= SHELF_MIN_RECIPES
+  const gridTitle = isSearching ? 'Search results' : favFilter ? 'Favorites' : tagFilter ?? 'All recipes'
 
   return (
     <div className="pb-10">
       <ScreenHeader
         title="Cookbook"
-        subtitle={all.data ? pluralize(all.data.length, 'recipe') : undefined}
+        subtitle={
+          all.data
+            ? [pluralize(all.data.length, 'recipe'), favCount ? pluralize(favCount, 'favorite') : '']
+                .filter(Boolean)
+                .join(' · ')
+            : undefined
+        }
         action={
           <IconButton icon="plus" label="Add a recipe" variant="accent" onClick={() => setAddOpen(true)} />
         }
@@ -126,6 +159,34 @@ export default function Cookbook() {
         </label>
       </div>
 
+      {allItems.length > 0 && (
+        <nav aria-label="Filter recipes" className="no-scrollbar flex gap-2 overflow-x-auto px-5 pb-0.5 pt-3.5">
+          <Chip active={!filtering} onClick={() => setFilter(null)}>
+            All
+          </Chip>
+          {favCount > 0 && (
+            <Chip icon="heart" active={favFilter} onClick={() => setFilter(favFilter ? null : { fav: true })}>
+              Favorites
+            </Chip>
+          )}
+          {chipTags.map((t) => {
+            const on = tagFilter?.toLowerCase() === t.toLowerCase()
+            return (
+              <Chip key={t} active={on} onClick={() => setFilter(on ? null : { tag: t })}>
+                {t}
+              </Chip>
+            )
+          })}
+          <Link
+            to="/app/cookbook/collections"
+            className="inline-flex h-9 flex-none items-center gap-1.5 rounded-full px-3 text-[13.5px] font-semibold text-terracotta-deep hover:bg-chip"
+          >
+            Collections
+            <Icon name="chevronRight" size={14} strokeWidth={2.4} />
+          </Link>
+        </nav>
+      )}
+
       {recipes.isError ? (
         <div className="px-5 pt-6">
           <DegradedBanner tone="danger" onRetry={() => recipes.refetch()} retrying={recipes.isFetching}>
@@ -148,7 +209,17 @@ export default function Cookbook() {
       ) : items.length === 0 ? (
         <div className="px-5 pt-6">
           {isSearching ? (
-            <EmptyState icon="search" message={`No recipes match "${search.trim()}".`} />
+            <EmptyState icon="search" message={`No recipes match "${search.trim()}"${filtering ? ' in this filter' : ''}.`} />
+          ) : filtering ? (
+            <EmptyState
+              icon={favFilter ? 'heart' : 'list'}
+              message={favFilter ? 'No favorites yet — tap the heart on a recipe.' : `Nothing tagged "${tagFilter}" yet.`}
+              action={
+                <Button variant="secondary" className="mt-1 h-11 px-5 text-sm" onClick={() => setFilter(null)}>
+                  Show all recipes
+                </Button>
+              }
+            />
           ) : (
             <EmptyState
               icon="book"
@@ -165,7 +236,7 @@ export default function Cookbook() {
       ) : (
         <>
           {showShelves && shelves.again.length > 0 && (
-            <Shelf title="Cook again" sub="Recipes you haven't made in a while">
+            <Shelf title="Cook again" sub="Favorites and past hits you haven't made lately">
               {shelves.again.map((r) => (
                 <button
                   key={r.id}
@@ -174,14 +245,19 @@ export default function Cookbook() {
                 >
                   <div className="relative h-[176px] overflow-hidden rounded-card bg-tile lg:h-[196px]">
                     <AuthedImage path={r.image_url} alt="" label="recipe photo" />
-                    <span className="absolute bottom-2.5 left-2.5 rounded-[12px] bg-surface/85 px-2.5 py-[5px] text-[12px] font-semibold text-ink backdrop-blur">
-                      Cooked {shortDate(r.last_cooked_at)}
+                    <span className="absolute bottom-2.5 left-2.5 inline-flex items-center gap-1 rounded-[12px] bg-surface/85 px-2.5 py-[5px] text-[12px] font-semibold text-ink backdrop-blur">
+                      {r.is_favorite && <Icon name="heart" size={12} filled strokeWidth={0} className="text-terracotta" />}
+                      {r.cooked_count > 0 ? `Made ${r.cooked_count}×` : 'Favorite'}
                     </span>
                   </div>
                   <div className="mt-2.5 line-clamp-2 font-serif text-[18px] font-medium leading-[1.2] text-ink">
                     {r.title}
                   </div>
-                  <div className="mt-[3px] text-[13px] text-muted">{metaLine(r)}</div>
+                  <div className="mt-[3px] text-[13px] text-muted">
+                    {[r.last_cooked_at ? `Last made ${shortDate(r.last_cooked_at)}` : 'Not made yet', r.total_time]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </div>
                 </button>
               ))}
             </Shelf>
@@ -242,8 +318,15 @@ export default function Cookbook() {
             <SectionHeading
               id="sh-all"
               sub={pluralize(items.length, isSearching ? 'match' : 'recipe', isSearching ? 'matches' : undefined)}
+              action={
+                filtering ? (
+                  <button type="button" onClick={() => setFilter(null)} className="min-h-[36px] px-1">
+                    Clear filter
+                  </button>
+                ) : undefined
+              }
             >
-              {isSearching ? 'Search results' : 'All recipes'}
+              {gridTitle}
             </SectionHeading>
             <CardGrid>
               {items.map((r) => (
@@ -291,13 +374,19 @@ function RecipeCard({ recipe, onOpen }: { recipe: RecipeSummary; onOpen: () => v
   const meta = metaLine(recipe)
   return (
     <button onClick={onOpen} className="group min-w-0 cursor-pointer self-start text-left">
-      <div className="aspect-[4/3] overflow-hidden rounded-[14px] bg-tile">
+      <div className="relative aspect-[4/3] overflow-hidden rounded-[14px] bg-tile">
         <AuthedImage
           path={recipe.image_url}
           alt=""
           label="recipe photo"
           className="transition-transform duration-300 group-hover:scale-[1.03]"
         />
+        {recipe.is_favorite && (
+          <span className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-surface/85 text-terracotta backdrop-blur">
+            <Icon name="heart" size={14} filled strokeWidth={0} />
+            <span className="sr-only">Favorite</span>
+          </span>
+        )}
       </div>
       <div className="mt-2 line-clamp-2 font-serif text-[15.5px] font-medium leading-[1.22] text-ink">
         {recipe.title}

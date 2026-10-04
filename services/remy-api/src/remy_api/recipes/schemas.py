@@ -113,16 +113,52 @@ class RecipeSummary(BaseModel):
     total_time: str | None
     created_at: datetime
     last_cooked_at: datetime | None
+    cooked_count: int = 0
+    is_favorite: bool = False
+    rating: int | None = None
+    tags: list[str] = Field(default_factory=list)
 
 
 class RecipeDetail(RecipeSummary):
     """Full recipe detail view."""
 
+    notes: str | None = None
     recipe_yield: str | None
     prep_time: str | None
     cook_time: str | None
     instructions: list[str]
     ingredients: list[IngredientOut]
+
+
+MAX_TAGS = 20
+MAX_TAG_LENGTH = 40
+MAX_NOTES_LENGTH = 5000
+
+
+def normalize_tags(tags: list[str]) -> list[str]:
+    """Trim, collapse whitespace and de-duplicate case-insensitively (first spelling wins)."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for tag in tags:
+        clean = " ".join(tag.split())
+        if not clean:
+            continue
+        if len(clean) > MAX_TAG_LENGTH:
+            raise ValueError(f"tags must be at most {MAX_TAG_LENGTH} characters")
+        key = clean.casefold()
+        if key not in seen:
+            seen.add(key)
+            out.append(clean)
+    if len(out) > MAX_TAGS:
+        raise ValueError(f"a recipe can have at most {MAX_TAGS} tags")
+    return out
+
+
+class TagCount(BaseModel):
+    """A tag in use across the user's cookbook (collections view)."""
+
+    name: str
+    count: int
 
 
 class RecipeFromUrl(BaseModel):
@@ -143,6 +179,12 @@ class RecipeUpdate(BaseModel):
     total_time: str | None = None
     instructions: list[str] | None = None
     ingredients: list[IngredientInput] | None = None
+    # Library fields. ``rating``/``notes`` accept null to clear; the others
+    # ignore null (they are never empty in the DB).
+    is_favorite: bool | None = None
+    rating: int | None = Field(default=None, ge=1, le=5)
+    notes: str | None = Field(default=None, max_length=MAX_NOTES_LENGTH)
+    tags: list[str] | None = None
 
     @field_validator("title")
     @classmethod
@@ -150,3 +192,13 @@ class RecipeUpdate(BaseModel):
         if value is not None and not value.strip():
             raise ValueError("title must not be blank")
         return value
+
+    @field_validator("tags")
+    @classmethod
+    def _clean_tags(cls, value: list[str] | None) -> list[str] | None:
+        return None if value is None else normalize_tags(value)
+
+    @field_validator("notes")
+    @classmethod
+    def _blank_notes_clear(cls, value: str | None) -> str | None:
+        return value if value is None or value.strip() else None

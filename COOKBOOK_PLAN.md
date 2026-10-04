@@ -1,6 +1,6 @@
 # Cookbook Plan — turning the Cookbook tab into a real recipe library
 
-Status: **planned** (scoped 2026-10-04). Not yet designed or built.
+Status: **v1 built** (2026-10-04, branch `rebrand`): items 1–5 plus the app-wide visual rebrand and dark mode (item 9). v2 items 6–8 remain.
 
 ## Why
 

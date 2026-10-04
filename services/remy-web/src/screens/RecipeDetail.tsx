@@ -10,6 +10,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { pluralize, shortDate } from '../lib/format'
 import { scaleLine } from '../lib/ingredients'
 import ScaleControls, { useScale } from '../components/ScaleControls'
+import { FavoriteButton, NotesCard, StarRating, TagRow } from '../components/RecipeLibrary'
 import { useDeleteRecipe, useMarkCooked, useRecipe, useUpdateRecipe } from '../lib/queries'
 import type { RecipeDetail as Recipe } from '../lib/types'
 import { toast } from '../stores/toast'
@@ -93,7 +94,10 @@ export default function RecipeDetail() {
     const y = yieldStat(r.recipe_yield)
     stats.push(scale.servings && scale.factor !== 1 ? { label: 'Serves', value: String(scale.servings) } : y)
   }
-  const statCols = ['', 'grid-cols-1', 'grid-cols-2', 'grid-cols-3', 'grid-cols-4'][stats.length]
+  if (r.cooked_count > 0) stats.push({ label: 'Made', value: r.cooked_count === 1 ? 'Once' : `${r.cooked_count}×` })
+  // Four cells max: Prep/Cook give way first (Total already covers them).
+  const shown = stats.length > 4 ? stats.filter((x) => x.label !== 'Prep').slice(0, 4) : stats
+  const statCols = ['', 'grid-cols-1', 'grid-cols-2', 'grid-cols-3', 'grid-cols-4'][shown.length]
 
   function toggle(ingId: string) {
     setTicked((prev) => {
@@ -124,30 +128,37 @@ export default function RecipeDetail() {
           onClick={() => setEditing(true)}
           className="absolute right-4 top-4"
         />
+        <FavoriteButton recipe={r} className="absolute right-[68px] top-4" />
       </div>
 
       <div className="relative -mt-6 rounded-t-[24px] bg-cream px-5 pt-6 lg:px-8">
-        <h1 className="font-serif text-[34px] font-medium leading-[1.05] tracking-[-0.02em] text-ink lg:text-[40px]">
+        <TagRow recipe={r} />
+        <h1 className="mt-3.5 font-serif text-[34px] font-medium leading-[1.05] tracking-[-0.02em] text-ink lg:text-[40px]">
           {r.title}
         </h1>
 
-        {r.source_url && (
-          <a
-            href={r.source_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-2.5 inline-flex min-h-[32px] items-center gap-[5px] text-[13.5px] font-semibold text-terracotta-deep hover:text-terracotta"
-          >
-            {domain || 'Original recipe'}
-            <Icon name="external" size={13} strokeWidth={2.2} />
-          </a>
-        )}
+        <div className="mt-2 flex min-h-[40px] items-center justify-between gap-3">
+          {r.source_url ? (
+            <a
+              href={r.source_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-[32px] min-w-0 items-center gap-[5px] truncate text-[13.5px] font-semibold text-terracotta-deep hover:text-terracotta"
+            >
+              {domain || 'Original recipe'}
+              <Icon name="external" size={13} strokeWidth={2.2} />
+            </a>
+          ) : (
+            <span />
+          )}
+          <StarRating recipe={r} />
+        </div>
 
-        {stats.length > 0 && (
+        {shown.length > 0 && (
           <dl
             className={`mt-4 grid ${statCols} divide-x divide-line overflow-hidden rounded-card border border-line bg-surface`}
           >
-            {stats.map((s) => (
+            {shown.map((s) => (
               <div key={s.label} className="min-w-0 px-3.5 py-3">
                 <dt className="text-[11.5px] font-semibold uppercase tracking-[.06em] text-muted">
                   {s.label}
@@ -202,7 +213,9 @@ export default function RecipeDetail() {
           )}
         </div>
         <div className="mt-2.5 text-center text-[13px] text-muted">
-          {r.last_cooked_at ? `Last cooked ${shortDate(r.last_cooked_at)}` : 'Not cooked yet'}
+          {r.last_cooked_at
+            ? `${r.cooked_count > 1 ? `Made ${r.cooked_count} times · last` : 'Last made'} ${shortDate(r.last_cooked_at)}`
+            : 'Not made yet'}
         </div>
 
         <div className="lg:mt-4 lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-10">
@@ -271,6 +284,10 @@ export default function RecipeDetail() {
               </ol>
             </section>
           )}
+        </div>
+
+        <div className="mt-8">
+          <NotesCard recipe={r} />
         </div>
 
         <div className="mt-9 flex justify-center border-t border-line pt-4">

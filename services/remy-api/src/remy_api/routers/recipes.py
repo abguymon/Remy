@@ -29,6 +29,7 @@ from remy_api.recipes.schemas import (
     RecipeFromUrl,
     RecipeSummary,
     RecipeUpdate,
+    TagCount,
 )
 from remy_api.recipes.scraper import scrape_recipe
 
@@ -39,29 +40,31 @@ def _image_url(recipe: Recipe) -> str | None:
     return f"/recipes/{recipe.id}/image" if recipe.image_path else None
 
 
+def _summary_fields(recipe: Recipe) -> dict:
+    return {
+        "id": recipe.id,
+        "title": recipe.title,
+        "slug": recipe.slug,
+        "source_url": recipe.source_url,
+        "image_url": _image_url(recipe),
+        "total_time": recipe.total_time,
+        "created_at": recipe.created_at,
+        "last_cooked_at": recipe.last_cooked_at,
+        "cooked_count": recipe.cooked_count or 0,
+        "is_favorite": bool(recipe.is_favorite),
+        "rating": recipe.rating,
+        "tags": list(recipe.tags or []),
+    }
+
+
 def _to_summary(recipe: Recipe) -> RecipeSummary:
-    return RecipeSummary(
-        id=recipe.id,
-        title=recipe.title,
-        slug=recipe.slug,
-        source_url=recipe.source_url,
-        image_url=_image_url(recipe),
-        total_time=recipe.total_time,
-        created_at=recipe.created_at,
-        last_cooked_at=recipe.last_cooked_at,
-    )
+    return RecipeSummary(**_summary_fields(recipe))
 
 
 def _to_detail(recipe: Recipe) -> RecipeDetail:
     return RecipeDetail(
-        id=recipe.id,
-        title=recipe.title,
-        slug=recipe.slug,
-        source_url=recipe.source_url,
-        image_url=_image_url(recipe),
-        total_time=recipe.total_time,
-        created_at=recipe.created_at,
-        last_cooked_at=recipe.last_cooked_at,
+        **_summary_fields(recipe),
+        notes=recipe.notes,
         recipe_yield=recipe.recipe_yield,
         prep_time=recipe.prep_time,
         cook_time=recipe.cook_time,
@@ -83,6 +86,12 @@ async def list_or_search_recipes(
     else:
         recipes = await store.list_recipes(session, user.id, limit=limit, offset=offset)
     return [_to_summary(r) for r in recipes]
+
+
+@router.get("/tags", response_model=list[TagCount])
+async def list_tags(user: CurrentUser, session: SessionDep) -> list[TagCount]:
+    """Tags in use across the user's cookbook, most-used first (collections view)."""
+    return [TagCount(name=name, count=count) for name, count in await store.tag_counts(session, user.id)]
 
 
 @router.get("/{recipe_id}", response_model=RecipeDetail)

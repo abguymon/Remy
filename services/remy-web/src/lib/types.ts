@@ -258,6 +258,15 @@ export interface RecipeSummary {
   total_time: string | null
   created_at: string
   last_cooked_at: string | null
+  cooked_count: number
+  is_favorite: boolean
+  rating: number | null // 1..5
+  tags: string[]
+}
+
+export interface TagCount {
+  name: string
+  count: number
 }
 
 export interface Ingredient {
@@ -271,6 +280,7 @@ export interface Ingredient {
 }
 
 export interface RecipeDetail extends RecipeSummary {
+  notes: string | null
   recipe_yield: string | null
   prep_time: string | null
   cook_time: string | null
@@ -287,6 +297,10 @@ export interface RecipeUpdate {
   total_time?: string | null
   instructions?: string[]
   ingredients?: { raw: string }[]
+  is_favorite?: boolean
+  rating?: number | null
+  notes?: string | null
+  tags?: string[]
 }
 
 // --- orders (T8: cart-as-record) ---

@@ -142,7 +142,16 @@ export function useRecipes(q: string) {
   return useQuery({
     queryKey: ['recipes', query],
     queryFn: () =>
-      api.get<RecipeSummary[]>(`/recipes${query ? `?q=${encodeURIComponent(query)}` : ''}`),
+      // The cookbook is household-sized: load it whole (API max) so shelves,
+      // filters and counts see every recipe, not just the newest 50.
+      api.get<RecipeSummary[]>(`/recipes?limit=200${query ? `&q=${encodeURIComponent(query)}` : ''}`),
+  })
+}
+
+export function useRecipeTags() {
+  return useQuery({
+    queryKey: ['recipes', 'tags'],
+    queryFn: () => api.get<import('./types').TagCount[]>('/recipes/tags'),
   })
 }
 
@@ -180,6 +189,20 @@ export function useUpdateRecipe(id: string) {
   return useMutation({
     mutationFn: (body: import('./types').RecipeUpdate) =>
       api.put<RecipeDetail>(`/recipes/${id}`, body),
+    // Library fields (favorite, rating, tags, notes) apply optimistically so the
+    // heart and stars respond instantly; a failure rolls back.
+    onMutate: async (body) => {
+      await qc.cancelQueries({ queryKey: ['recipe', id] })
+      const prev = qc.getQueryData<RecipeDetail>(['recipe', id])
+      if (prev) {
+        const { ingredients: _ignored, ...fields } = body
+        qc.setQueryData<RecipeDetail>(['recipe', id], { ...prev, ...fields } as RecipeDetail)
+      }
+      return { prev }
+    },
+    onError: (_err, _body, ctx) => {
+      if (ctx?.prev) qc.setQueryData(['recipe', id], ctx.prev)
+    },
     onSuccess: (recipe) => {
       qc.setQueryData(['recipe', id], recipe)
       qc.invalidateQueries({ queryKey: ['recipes'] })

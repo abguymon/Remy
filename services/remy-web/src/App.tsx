@@ -6,6 +6,7 @@ import Landing from './screens/Landing'
 import Cookbook from './screens/Cookbook'
 import RecipeDetail from './screens/RecipeDetail'
 import CookMode from './screens/CookMode'
+import Collections from './screens/Collections'
 import CartRecord from './screens/CartRecord'
 import Settings from './screens/Settings'
 import NotFound from './screens/NotFound'
@@ -37,6 +38,7 @@ export default function App() {
       >
         <Route index element={<PlanFlow />} />
         <Route path="cookbook" element={<Cookbook />} />
+        <Route path="cookbook/collections" element={<Collections />} />
         <Route path="cookbook/:id" element={<RecipeDetail />} />
         <Route path="cart" element={<CartRecord />} />
         <Route path="settings" element={<Settings />} />
