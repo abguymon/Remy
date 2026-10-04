@@ -81,7 +81,8 @@
     --c-badge-favbg: 239 234 217;
     --c-badge-favfg: 122 106 43;
   }
-  html.dark {
+  html.dark,
+  .dark {
     --c-canvas: 15 12 10;
     --c-cream: 22 18 15;
     --c-creamsoft: 28 23 19;
@@ -118,7 +119,8 @@
     --c-badge-favbg: 46 42 28;
     --c-badge-favfg: 217 201 138;
   }
-  html.dark {
+  html.dark,
+  .dark {
     color-scheme: dark;
   }
 }

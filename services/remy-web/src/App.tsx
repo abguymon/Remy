@@ -5,6 +5,7 @@ import Join from './screens/Join'
 import Landing from './screens/Landing'
 import Cookbook from './screens/Cookbook'
 import RecipeDetail from './screens/RecipeDetail'
+import CookMode from './screens/CookMode'
 import CartRecord from './screens/CartRecord'
 import Settings from './screens/Settings'
 import NotFound from './screens/NotFound'
@@ -41,6 +42,15 @@ export default function App() {
         <Route path="settings" element={<Settings />} />
         <Route path="*" element={<NotFound />} />
       </Route>
+      {/* Cook mode is full screen — outside the app chrome. */}
+      <Route
+        path="/app/cookbook/:id/cook"
+        element={
+          <RequireAuth>
+            <CookMode />
+          </RequireAuth>
+        }
+      />
       <Route path="/cookbook/*" element={<Navigate to="/app/cookbook" replace />} />
       <Route path="/cart" element={<Navigate to="/app/cart" replace />} />
       <Route path="/settings" element={<Navigate to="/app/settings" replace />} />

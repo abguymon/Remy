@@ -1,13 +1,15 @@
 // Recipe detail (DESIGN_BRIEF §4.8, visual language v2 §8) — the most
 // editorial screen. Tall photo with glass back button, a cream sheet that
 // overlaps it, serif title, source link, a stat strip, then ingredients (tap to
-// tick off while cooking — local only) and big-numeral method steps.
-// Actions: "I cooked this" (stamps last_cooked_at), edit (sheet → PUT),
-// delete (confirm), open original.
+// tick off while cooking — local only; scaled + US/metric via ScaleControls)
+// and big-numeral method steps. Actions: "Start cooking" (cook mode), "I cooked
+// this" (stamps last_cooked_at), edit (sheet → PUT), delete (confirm), original.
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { pluralize, shortDate } from '../lib/format'
+import { scaleLine } from '../lib/ingredients'
+import ScaleControls, { useScale } from '../components/ScaleControls'
 import { useDeleteRecipe, useMarkCooked, useRecipe, useUpdateRecipe } from '../lib/queries'
 import type { RecipeDetail as Recipe } from '../lib/types'
 import { toast } from '../stores/toast'
@@ -30,18 +32,6 @@ function domainOf(url: string | null): string {
   }
 }
 
-// Split a raw ingredient line into a leading amount ("1 ½ pounds", "3 or 4",
-// "½ cup") and the rest, so the amount can be set in bold. Display only — the
-// raw text is shown unchanged; lines without a leading amount stay whole.
-const NUM = String.raw`(?:\d+(?:[./]\d+)?(?:\s*[½⅓⅔¼¾⅛⅜⅝⅞])?|[½⅓⅔¼¾⅛⅜⅝⅞])`
-const UNIT = String.raw`(?:cups?|tablespoons?|tbsps?|tbsp|teaspoons?|tsps?|tsp|pounds?|lbs?|ounces?|oz|grams?|g|kilograms?|kg|ml|milliliters?|liters?|l|cloves?|cans?|pinch(?:es)?|quarts?|pints?|sticks?|bunch(?:es)?)`
-const AMOUNT = new RegExp(String.raw`^(${NUM}(?:\s*(?:-|–|to|or)\s*${NUM})?(?:\s+${UNIT}\.?(?=\s))?)\s+(.+)$`, 'i')
-
-function splitAmount(raw: string): { amount: string; rest: string } {
-  const m = AMOUNT.exec(raw.trim())
-  return m ? { amount: m[1], rest: m[2] } : { amount: '', rest: raw }
-}
-
 // "6 servings" → Serves 6; anything else stays a free-text yield.
 function yieldStat(y: string): { label: string; value: string } {
   const m = /^(\d+(?:\s*(?:-|–|to)\s*\d+)?)\s*(?:servings?|people|portions?)?$/i.exec(y.trim())
@@ -57,6 +47,7 @@ export default function RecipeDetail() {
   const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [ticked, setTicked] = useState<Set<string>>(() => new Set())
+  const scale = useScale(recipe.data)
 
   const back = () => navigate('/app/cookbook')
 
@@ -98,7 +89,10 @@ export default function RecipeDetail() {
   if (r.total_time) stats.push({ label: 'Total', value: r.total_time })
   if (r.prep_time) stats.push({ label: 'Prep', value: r.prep_time })
   if (r.cook_time) stats.push({ label: 'Cook', value: r.cook_time })
-  if (r.recipe_yield) stats.push(yieldStat(r.recipe_yield))
+  if (r.recipe_yield) {
+    const y = yieldStat(r.recipe_yield)
+    stats.push(scale.servings && scale.factor !== 1 ? { label: 'Serves', value: String(scale.servings) } : y)
+  }
   const statCols = ['', 'grid-cols-1', 'grid-cols-2', 'grid-cols-3', 'grid-cols-4'][stats.length]
 
   function toggle(ingId: string) {
@@ -164,9 +158,19 @@ export default function RecipeDetail() {
           </dl>
         )}
 
-        <div className="lg:flex lg:gap-2.5">
+        {r.instructions.length > 0 && (
           <Button
-            className="mt-4 h-[54px] w-full !rounded-card text-[16.5px] font-bold lg:flex-[2]"
+            className="mt-4 h-[54px] w-full !rounded-card text-[16.5px] font-bold"
+            onClick={() => navigate(`/app/cookbook/${r.id}/cook`)}
+          >
+            <Icon name="play" size={19} filled strokeWidth={0} />
+            Start cooking
+          </Button>
+        )}
+        <div className={`mt-2.5 grid gap-2.5 ${r.source_url ? 'grid-cols-3' : 'grid-cols-2'}`}>
+          <Button
+            variant="secondary"
+            className="h-[46px] !border-line px-2 text-[14px]"
             busy={cooked.isPending}
             disabled={cooked.isPending}
             onClick={async () => {
@@ -174,30 +178,28 @@ export default function RecipeDetail() {
               toast('Marked as cooked')
             }}
           >
-            {!cooked.isPending && <Icon name="check" size={20} strokeWidth={2.4} />}
-            {cooked.isPending ? 'Marking cooked…' : 'I cooked this'}
+            {!cooked.isPending && <Icon name="check" size={17} strokeWidth={2.4} />}
+            Cooked it
           </Button>
-          <div className={`mt-2.5 grid gap-2.5 lg:mt-4 lg:flex-[2] ${r.source_url ? 'grid-cols-2' : 'grid-cols-1'}`}>
-            <Button
-              variant="secondary"
-              className="h-[46px] !border-line text-[14px] lg:h-[54px]"
-              onClick={() => setEditing(true)}
+          <Button
+            variant="secondary"
+            className="h-[46px] !border-line px-2 text-[14px]"
+            onClick={() => setEditing(true)}
+          >
+            <Icon name="edit" size={17} strokeWidth={2} />
+            Edit
+          </Button>
+          {r.source_url && (
+            <a
+              href={r.source_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-[46px] items-center justify-center gap-2 rounded-[14px] border border-line bg-surface px-2 text-[14px] font-semibold text-ink hover:bg-cream"
             >
-              <Icon name="edit" size={17} strokeWidth={2} />
-              Edit recipe
-            </Button>
-            {r.source_url && (
-              <a
-                href={r.source_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex h-[46px] items-center justify-center gap-2 rounded-[14px] border border-line bg-surface text-[14px] font-semibold text-ink hover:bg-cream lg:h-[54px]"
-              >
-                <Icon name="external" size={17} strokeWidth={2} />
-                Original
-              </a>
-            )}
-          </div>
+              <Icon name="external" size={17} strokeWidth={2} />
+              Original
+            </a>
+          )}
         </div>
         <div className="mt-2.5 text-center text-[13px] text-muted">
           {r.last_cooked_at ? `Last cooked ${shortDate(r.last_cooked_at)}` : 'Not cooked yet'}
@@ -215,10 +217,11 @@ export default function RecipeDetail() {
               }>
                 Ingredients
               </SectionHeading>
+              <ScaleControls recipe={r} className="mt-3.5" />
               <ul className="mt-2">
                 {r.ingredients.map((ing) => {
                   const done = ticked.has(ing.id)
-                  const { amount, rest } = splitAmount(ing.raw)
+                  const { amount, rest } = scaleLine(ing.raw, scale.factor, scale.system)
                   return (
                     <li key={ing.id} className="border-b border-line">
                       <button
