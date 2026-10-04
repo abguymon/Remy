@@ -19,6 +19,8 @@ import uuid
 from sqlalchemy import select
 
 from remy_api import memory
+from remy_api.config import get_settings
+from remy_api.decisions import jev
 from remy_api.kroger.errors import KrogerError, KrogerNotConnectedError
 from remy_api.kroger.models import Product, StockLevel
 from remy_api.llm.errors import LLMError
@@ -147,7 +149,75 @@ async def _extract_products(lines: list[ListLine]) -> dict[str, list[product_ext
     return result
 
 
-async def _rank(term: str, target_size: str | None, package_qty: int, products: list[Product]) -> list[Product]:
+_JEV_INSTRUCTIONS = (
+    "Which store product should the shopper buy for this shopping-list item? "
+    "Pick the actual ingredient, not a prepared food, mix or seasoning that merely contains it. "
+    "For fresh produce, a canned, frozen or dried product is not acceptable. "
+    "Prefer a single unit over a multipack or value pack unless several are needed, "
+    "the size closest to the target size, and stay brand-neutral unless the item names a brand. "
+    "Choose 'none' if no product is a reasonable purchase."
+)
+_JEV_MIN_PROBABILITY = 0.01  # below this an option is treated as rejected
+_RANK_DEPTH = 4  # top pick + up to 3 alternatives, like the P5 prompt
+
+
+def _product_option(p: Product) -> str:
+    parts = [p.description or "", p.size or ""]
+    if p.price and p.price.regular is not None:
+        price = f"${p.price.regular:.2f}"
+        if p.price.promo is not None and p.price.promo < p.price.regular:
+            price += f" (sale ${p.price.promo:.2f})"
+        parts.append(price)
+    if p.department:
+        parts.append(p.department)
+    return " · ".join(x for x in parts if x)
+
+
+async def _rank_with_jev(
+    term: str, target_size: str | None, package_qty: int, products: list[Product]
+) -> tuple[list[Product], float]:
+    """Jev typed choice over the products (+ "none"); best-first and the pick confidence."""
+    state = f"Shopping-list item: {term}\nPackages needed: {package_qty}"
+    if target_size:
+        state += f"\nTarget size: {target_size}"
+    criteria: dict[str, str | None] = {f"p{i}": _product_option(p) for i, p in enumerate(products)}
+    criteria["none"] = "None of these products is an acceptable purchase for this item."
+    answer = await jev.choice(state, _JEV_INSTRUCTIONS, criteria)
+    if answer.choice == "none":
+        return [], answer.confidence
+    ranked = sorted(
+        (
+            (prob, int(key[1:]))
+            for key, prob in answer.probabilities.items()
+            if key != "none" and prob >= _JEV_MIN_PROBABILITY
+        ),
+        reverse=True,
+    )
+    ordered = [products[i] for _, i in ranked[:_RANK_DEPTH] if 0 <= i < len(products)]
+    return ordered, answer.confidence
+
+
+async def _rank(
+    term: str, target_size: str | None, package_qty: int, products: list[Product]
+) -> tuple[list[Product], float | None]:
+    """Rank products best-first ([] if none acceptable) with the pick confidence when known.
+
+    ``PRODUCT_RANKER=jev`` uses Jev; any Jev failure is logged and falls back to
+    the P5 LLM ranking for that item.
+    """
+    if not products:
+        return [], None
+    if get_settings().product_ranker == "jev":
+        try:
+            return await _rank_with_jev(term, target_size, package_qty, products)
+        except jev.JevError as exc:
+            logger.warning("Jev ranking failed for %r; falling back to LLM ranking: %s", term, exc)
+    return await _rank_with_llm(term, target_size, package_qty, products), None
+
+
+async def _rank_with_llm(
+    term: str, target_size: str | None, package_qty: int, products: list[Product]
+) -> list[Product]:
     """LLM-rank products (P5); returns products best-first, or [] if none acceptable."""
     if not products:
         return []
@@ -205,7 +275,7 @@ async def _match_one(
     if _usual_from_products(item, products, fulfillment, usuals):
         return item
 
-    ranked = await _rank(item.search_term, item.target_size, item.count, products)
+    ranked, item.pick_confidence = await _rank(item.search_term, item.target_size, item.count, products)
     if not ranked:
         item.status = ItemStatus.NOT_FOUND
         return item

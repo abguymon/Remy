@@ -196,6 +196,8 @@ class MatchItem(BaseModel):
     alternatives: list[Alternative] = Field(default_factory=list)
     error: str | None = None
     confidence: float | None = None
+    # Ranker's confidence in its top pick (Jev only; None for the LLM ranker).
+    pick_confidence: float | None = None
     # True when this product was chosen from purchase memory (a "usual") — the
     # match short-circuit skipped P5 ranking, or it was added from the usuals strip.
     is_usual: bool = False
