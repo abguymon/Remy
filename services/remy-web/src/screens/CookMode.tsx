@@ -7,7 +7,14 @@ import { useNavigate, useParams } from 'react-router-dom'
 import Icon from '../components/Icon'
 import ScaleControls, { useScale } from '../components/ScaleControls'
 import { Button, EmptyState, IconButton } from '../components/ui'
-import { ingredientKeywords, scaleLine, stepMentions, stepTimers } from '../lib/ingredients'
+import {
+  groupBySection,
+  ingredientKeywords,
+  renderIngredient,
+  sectionTitle,
+  stepMentions,
+  stepTimers,
+} from '../lib/ingredients'
 import { useMarkCooked, useRecipe } from '../lib/queries'
 import { toast } from '../stores/toast'
 
@@ -193,7 +200,11 @@ export default function CookMode() {
     exit()
   }
 
-  const servingsNote = scale.servings ? `${scale.servings} servings` : scale.factor !== 1 ? `${scale.factor}× batch` : null
+  const servingsNote = scale.servings
+    ? `${scale.servings} ${scale.servings === 1 ? scale.noun.one : scale.noun.many}`
+    : scale.factor !== 1
+      ? `${scale.factor}× batch`
+      : null
 
   return (
     <div
@@ -314,7 +325,7 @@ export default function CookMode() {
             <div className="text-[11.5px] font-bold uppercase tracking-[.08em] text-faint">For this step</div>
             <ul className="mt-2.5 flex flex-wrap gap-2">
               {uses.map((ing) => {
-                const s = scaleLine(ing.raw, scale.factor, scale.system)
+                const s = renderIngredient(ing, scale.factor, scale.system)
                 return (
                   <li
                     key={ing.id}
@@ -398,17 +409,24 @@ export default function CookMode() {
             </div>
             <div className="overflow-y-auto px-5 pb-6">
               <ScaleControls recipe={r} />
-              <ul className="mt-2">
-                {r.ingredients.map((ing) => {
-                  const s = scaleLine(ing.raw, scale.factor, scale.system)
-                  return (
-                    <li key={ing.id} className="border-b border-line py-3 text-[15.5px] leading-[1.4]">
-                      {s.amount && <strong className="font-bold">{s.amount} </strong>}
-                      {s.rest}
-                    </li>
-                  )
-                })}
-              </ul>
+              {groupBySection(r.ingredients).map((group, gi) => (
+                <div key={gi}>
+                  {group.section && (
+                    <h3 className="mt-5 font-serif text-[17px] font-medium">{sectionTitle(group.section)}</h3>
+                  )}
+                  <ul className={group.section ? 'mt-1' : 'mt-2'}>
+                    {group.items.map((ing) => {
+                      const s = renderIngredient(ing, scale.factor, scale.system)
+                      return (
+                        <li key={ing.id} className="border-b border-line py-3 text-[15.5px] leading-[1.4]">
+                          {s.amount && <strong className="font-bold">{s.amount} </strong>}
+                          {s.rest}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
+              ))}
             </div>
           </div>
         </div>

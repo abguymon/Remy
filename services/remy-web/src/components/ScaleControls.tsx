@@ -1,7 +1,7 @@
 // Servings scaler + US/metric toggle for a recipe's ingredient list. Uses a
 // servings stepper when the yield has a number ("6 servings"), otherwise
 // multiplier chips (½× 1× 2× 3×).
-import { detectSystem, parseServings } from '../lib/ingredients'
+import { detectSystem, parseServings, yieldNoun } from '../lib/ingredients'
 import type { UnitSystem } from '../lib/ingredients'
 import type { RecipeDetail } from '../lib/types'
 import { useCookPref, useCookPrefs } from '../stores/cookPrefs'
@@ -19,6 +19,7 @@ export function useScale(recipe: RecipeDetail | undefined) {
     system: (pref.system ?? native) as UnitSystem,
     baseServings: base,
     servings: base ? Math.max(1, Math.round(base * pref.factor)) : null,
+    noun: yieldNoun(recipe?.recipe_yield),
   }
 }
 
@@ -28,7 +29,7 @@ function multLabel(m: number) {
 
 export default function ScaleControls({ recipe, className = '' }: { recipe: RecipeDetail; className?: string }) {
   const setPref = useCookPrefs((s) => s.set)
-  const { factor, system, baseServings, servings } = useScale(recipe)
+  const { factor, system, baseServings, servings, noun } = useScale(recipe)
   const setServings = (n: number) => baseServings && setPref(recipe.id, { factor: n / baseServings })
 
   return (
@@ -37,7 +38,7 @@ export default function ScaleControls({ recipe, className = '' }: { recipe: Reci
         <div className="flex items-center justify-between rounded-card border border-line bg-surface py-2 pl-4 pr-2">
           <div>
             <div className="text-[15px] font-semibold text-ink" aria-live="polite">
-              {servings} {servings === 1 ? 'serving' : 'servings'}
+              {servings} {servings === 1 ? noun.one : noun.many}
             </div>
             <div className="text-[12.5px] text-muted">
               {factor === 1 ? 'As written' : `Scaled from ${baseServings}`}
@@ -46,7 +47,7 @@ export default function ScaleControls({ recipe, className = '' }: { recipe: Reci
           <div className="flex items-center gap-2">
             <button
               type="button"
-              aria-label="Fewer servings"
+              aria-label={`Fewer ${noun.many}`}
               disabled={servings <= 1}
               onClick={() => setServings(servings - 1)}
               className="flex h-11 w-11 items-center justify-center rounded-[12px] border border-line bg-cream text-ink disabled:opacity-40"
@@ -55,7 +56,7 @@ export default function ScaleControls({ recipe, className = '' }: { recipe: Reci
             </button>
             <button
               type="button"
-              aria-label="More servings"
+              aria-label={`More ${noun.many}`}
               disabled={servings >= baseServings * 8}
               onClick={() => setServings(servings + 1)}
               className="flex h-11 w-11 items-center justify-center rounded-[12px] border border-line bg-cream text-ink disabled:opacity-40"

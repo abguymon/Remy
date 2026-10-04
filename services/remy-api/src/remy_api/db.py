@@ -104,6 +104,8 @@ def _apply_additive_migrations(conn) -> None:  # noqa: ANN001
         ("recipes", "rating", "INTEGER"),
         ("recipes", "notes", "TEXT"),
         ("recipes", "tags", "JSON NOT NULL DEFAULT '[]'"),
+        ("recipe_ingredients", "section", "VARCHAR(255)"),
+        ("recipe_ingredients", "alt_raw", "TEXT"),
     ]
     for table, column, ddl_type in additions:
         if table not in tables:

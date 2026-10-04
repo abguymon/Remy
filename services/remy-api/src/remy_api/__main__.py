@@ -15,6 +15,11 @@ Commands
 ``import-mealie --username X --url URL --api-key KEY [--dry-run]``
     One-shot import of a Mealie instance's recipes (+ images) into the store for
     user ``X`` (PRD §5). Idempotent by Mealie slug; safe to re-run.
+
+``enrich-recipes [--username X] [--dry-run]``
+    Re-read each saved recipe's source page and fill in ingredient sections and
+    the author's unit conversions on lines that still match the page. Never
+    overwrites edits; safe to re-run.
 """
 
 from __future__ import annotations
@@ -29,7 +34,8 @@ from sqlalchemy import select
 
 from remy_api.db import dispose_engine, get_session_factory, init_db
 from remy_api.errors import APIError
-from remy_api.models import User
+from remy_api.models import Recipe, User
+from remy_api.recipes.enrich import backfill_recipe
 from remy_api.recipes.mealie_import import import_mealie
 from remy_api.user_service import create_user
 
@@ -94,6 +100,29 @@ async def _import_mealie(username: str, url: str, api_key: str, dry_run: bool) -
         await dispose_engine()
 
 
+async def _enrich_recipes(username: str | None, dry_run: bool) -> None:
+    await init_db()
+    try:
+        factory = get_session_factory()
+        async with factory() as session:
+            query = select(Recipe).order_by(Recipe.created_at)
+            if username:
+                user = await _resolve_user(session, username)
+                query = query.where(Recipe.user_id == user.id)
+            recipes = list((await session.execute(query)).scalars().all())
+            total = 0
+            for recipe in recipes:
+                count, status = await backfill_recipe(recipe, dry_run=dry_run)
+                total += count
+                print(f"  {recipe.title[:48]:<48} {count:>3} lines  {status}")
+            if not dry_run:
+                await session.commit()
+        prefix = "[dry-run] " if dry_run else ""
+        print(f"{prefix}Enriched {total} ingredient lines across {len(recipes)} recipes.")
+    finally:
+        await dispose_engine()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="remy_api", description="Remy API management commands.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -112,6 +141,10 @@ def main(argv: list[str] | None = None) -> int:
     mealie.add_argument("--url", required=True, help="Mealie base URL, e.g. http://mealie:9000")
     mealie.add_argument("--api-key", required=True, help="Mealie API token.")
     mealie.add_argument("--dry-run", action="store_true", help="Report without writing or downloading.")
+
+    enrich = sub.add_parser("enrich-recipes", help="Add ingredient sections + author conversions from sources.")
+    enrich.add_argument("--username", help="Only this user's recipes (default: everyone's).")
+    enrich.add_argument("--dry-run", action="store_true", help="Report what would change without writing.")
 
     args = parser.parse_args(argv)
 
@@ -145,6 +178,10 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
+        return 0
+
+    if args.command == "enrich-recipes":
+        asyncio.run(_enrich_recipes(args.username, args.dry_run))
         return 0
 
     parser.print_help()

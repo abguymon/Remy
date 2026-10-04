@@ -219,15 +219,112 @@ function bestUS(base: number, dim: Dim): { value: number; def: UnitDef } {
   // Under a cup, only use cups for amounts people measure that way (¼ ⅓ ½ ⅔ ¾);
   // otherwise tablespoons read better ("10 tbsp", not "⅝ cup").
   const clean = (n: number) => Math.abs(n - Math.round(n)) < 0.06
-  if (base < 59 || (cups < 1 && !clean(cups * 4) && !clean(cups * 3))) {
+  const measurableCup = cups >= 0.23 && (clean(cups * 4) || clean(cups * 3))
+  if (!measurableCup && (base < 59 || cups < 1)) {
     const tbsp = base / 14.79
     return tbsp < 2 && !clean(tbsp * 2) ? { value: base / 4.93, def: UNITS.tsp } : { value: tbsp, def: UNITS.tbsp }
   }
   return { value: cups, def: UNITS.cup }
 }
 
+// --- Ingredient densities ------------------------------------------------------
+// Grams per US cup (240 ml) for ingredients commonly written by weight in one
+// system and by volume in the other. Values follow King Arthur's ingredient
+// weight chart. `dry` items convert to grams in metric mode; liquids stay in ml.
+// `preferWeight` items (cream cheese) stay in ounces in US mode.
+
+interface Density {
+  gPerCup: number
+  kind: 'dry' | 'liquid'
+  preferWeight?: boolean
+}
+
+const DENSITIES: [string, Density][] = (
+  [
+    ['all-purpose flour', 125, 'dry'],
+    ['bread flour', 127, 'dry'],
+    ['whole wheat flour', 113, 'dry'],
+    ['cake flour', 113, 'dry'],
+    ['almond flour', 96, 'dry'],
+    ['flour', 125, 'dry'],
+    ['powdered sugar', 113, 'dry'],
+    ["confectioners' sugar", 113, 'dry'],
+    ['confectioners sugar', 113, 'dry'],
+    ['icing sugar', 113, 'dry'],
+    ['brown sugar', 213, 'dry'],
+    ['granulated sugar', 198, 'dry'],
+    ['caster sugar', 198, 'dry'],
+    ['sugar', 198, 'dry'],
+    ['cocoa powder', 84, 'dry'],
+    ['cornstarch', 112, 'dry'],
+    ['rolled oats', 89, 'dry'],
+    ['old-fashioned oats', 89, 'dry'],
+    ['oats', 89, 'dry'],
+    ['quinoa', 177, 'dry'],
+    ['rice', 198, 'dry'],
+    ['chocolate chips', 170, 'dry'],
+    ['instant dry yeast', 149, 'dry'],
+    ['instant yeast', 149, 'dry'],
+    ['active dry yeast', 149, 'dry'],
+    ['yeast', 149, 'dry'],
+    ['baking powder', 192, 'dry'],
+    ['baking soda', 288, 'dry'],
+    ['kosher salt', 144, 'dry'],
+    ['sea salt', 240, 'dry'],
+    ['salt', 288, 'dry'],
+    ['ground cinnamon', 125, 'dry'],
+    ['ground cardamom', 96, 'dry'],
+    ['ground ginger', 86, 'dry'],
+    ['ground nutmeg', 106, 'dry'],
+    ['butter', 227, 'dry'],
+    ['cream cheese', 232, 'dry', true],
+    ['peanut butter', 270, 'liquid'],
+    ['honey', 336, 'liquid'],
+    ['maple syrup', 312, 'liquid'],
+    ['heavy cream', 232, 'liquid'],
+    ['whipping cream', 232, 'liquid'],
+    ['sour cream', 227, 'liquid'],
+    ['buttermilk', 242, 'liquid'],
+    ['yogurt', 227, 'liquid'],
+    ['milk', 242, 'liquid'],
+    ['water', 236, 'liquid'],
+    ['olive oil', 200, 'liquid'],
+    ['vegetable oil', 198, 'liquid'],
+    ['oil', 198, 'liquid'],
+    ['vanilla extract', 192, 'liquid'],
+    ['vanilla bean paste', 240, 'liquid'],
+  ] as [string, number, 'dry' | 'liquid', boolean?][]
+)
+  .map(([k, g, kind, pw]) => [k, { gPerCup: g, kind, preferWeight: pw }] as [string, Density])
+  .sort((a, b) => b[0].length - a[0].length) // most specific first ("brown sugar" before "sugar")
+
+/** Density for the ingredient named at the start of a line's remainder, if known. */
+export function densityFor(rest: string): Density | null {
+  // Only the ingredient name: stop at the first comma/parenthesis ("milk (warm)").
+  const name = rest.toLowerCase().split(/[,(;]/)[0]
+  for (const [key, d] of DENSITIES) {
+    if (new RegExp(`(^|[^a-z])${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^a-z])`).test(name)) return d
+  }
+  return null
+}
+
 function unitLabel(def: UnitDef, qty: number): string {
-  return qty > 1 && def.plural ? def.plural : def.canon
+  // Judge by the amount as displayed: 1.008 cups reads "1 cup".
+  return qty > 1 && formatQty(qty) !== '1' && def.plural ? def.plural : def.canon
+}
+
+// Density conversions are estimates, so snap to what people actually measure:
+// cups to ¼/⅓, tablespoons to ½, teaspoons and ounces to ¼.
+function snapApprox(value: number, def: UnitDef): number {
+  const to = (step: number) => Math.max(step, Math.round(value / step) * step)
+  if (def === UNITS.cup) {
+    const q = to(1 / 4)
+    const t = to(1 / 3)
+    return Math.abs(q - value) <= Math.abs(t - value) ? q : t
+  }
+  if (def === UNITS.tbsp) return to(1 / 2)
+  if (def === UNITS.tsp || def === UNITS.oz) return to(1 / 4)
+  return value
 }
 
 export interface ScaledLine {
@@ -264,9 +361,20 @@ export function scaleLine(raw: string, factor: number, system: UnitSystem): Scal
     const lo = alt ? alt.qty * alt.unit.base! : toBase(p.qty)
     const hiQ = alt ? alt.qty2 : p.qty2
     const hi = hiQ != null ? (alt ? hiQ * alt.unit.base! : toBase(hiQ)) : null
-    const dim = alt ? alt.unit.dim! : def.dim
+    let dim = alt ? alt.unit.dim! : def.dim
+    let k = 1 // base-unit multiplier when crossing weight <-> volume
+    // Cross weight <-> volume by ingredient density: US cooks measure flour,
+    // sugar, butter and milk by the cup; metric bakers weigh dry goods.
+    const d = alt ? null : densityFor(p.rest)
+    if (d && system === 'us' && dim === 'weight' && !d.preferWeight) {
+      dim = 'volume'
+      k = 240 / d.gPerCup // grams -> ml
+    } else if (d && system === 'metric' && dim === 'volume' && d.kind === 'dry') {
+      dim = 'weight'
+      k = d.gPerCup / 240 // ml -> grams
+    }
     return {
-      amount: renderBase(lo * factor, hi != null ? hi * factor : null, dim, system, sepOf(p.rangeWord)),
+      amount: renderBase(lo * k * factor, hi != null ? hi * k * factor : null, dim, system, sepOf(p.rangeWord), k !== 1),
       rest: p.rest,
       scaled: true,
     }
@@ -300,10 +408,22 @@ function keepUSUnit(def: UnitDef, q: number): boolean {
   if (def.canon === 'tsp') return q < 3
   if (def.canon === 'tbsp') return q < 8
   if (def.canon === 'oz' && def.dim === 'weight') return q < 32
+  if (def.canon === 'cup' && q < 1) {
+    // Under a cup, keep cups only for amounts people measure that way (¼ ⅓ ½ ⅔ ¾).
+    const near = (n: number) => Math.abs(n - Math.round(n)) < 0.06
+    return near(q * 4) || near(q * 3)
+  }
   return true
 }
 
-function renderBase(lo: number, hi: number | null, dim: Dim, system: UnitSystem, sep: string): string {
+function renderBase(
+  lo: number,
+  hi: number | null,
+  dim: Dim,
+  system: UnitSystem,
+  sep: string,
+  approx = false,
+): string {
   if (system === 'metric') {
     const a = roundMetric(lo, dim)
     if (hi == null) return `${a.value} ${a.unit}`
@@ -313,13 +433,14 @@ function renderBase(lo: number, hi: number | null, dim: Dim, system: UnitSystem,
   }
   // A range keeps one unit, picked from its lower bound.
   let a = bestUS(lo, dim)
+  if (approx) a = { ...a, value: snapApprox(a.value, a.def) }
   if (hi == null) return `${formatQty(a.value)} ${unitLabel(a.def, a.value)}`
   const near = (n: number) => Math.abs(n - Math.round(n)) < 0.06
   const hiCups = hi / 240
   if (a.def === UNITS.cup && hiCups < 1 && !near(hiCups * 4) && !near(hiCups * 3)) {
     a = { value: lo / UNITS.tbsp.base!, def: UNITS.tbsp } // "8–10 tbsp", not "½–⅝ cup"
   }
-  const hiVal = hi / a.def.base!
+  const hiVal = approx ? snapApprox(hi / a.def.base!, a.def) : hi / a.def.base!
   return `${formatQty(a.value)}${sep}${formatQty(hiVal)} ${unitLabel(a.def, hiVal)}`
 }
 
@@ -333,6 +454,32 @@ export function detectSystem(raws: string[]): UnitSystem {
     else if (s === 'metric') metric++
   }
   return metric > us ? 'metric' : 'us'
+}
+
+/** What a yield counts: "12 rolls" → rolls/roll, otherwise servings/serving. */
+export function yieldNoun(yieldText: string | null | undefined): { one: string; many: string } {
+  const m = yieldText?.match(/\d+\s*(?:-|–|to)?\s*\d*\s+([a-z][a-z -]*)/i)
+  const word = m?.[1].trim().toLowerCase()
+  if (!word || /^(servings?|people|persons?|portions?)$/.test(word)) return { one: 'serving', many: 'servings' }
+  const IRREGULAR: Record<string, string> = {
+    loaf: 'loaves',
+    dozen: 'dozen',
+    batch: 'batches',
+    serving: 'servings',
+    // -ie nouns, which the -ies → -y rule would get wrong
+    cookie: 'cookies',
+    brownie: 'brownies',
+    pie: 'pies',
+    smoothie: 'smoothies',
+  }
+  const singular = (w: string) =>
+    Object.keys(IRREGULAR).find((k) => IRREGULAR[k] === w) ??
+    (w.endsWith('ies') ? `${w.slice(0, -3)}y` : /(ch|sh|x)es$/.test(w) ? w.slice(0, -2) : w.replace(/(?<=[^s])s$/, ''))
+  const one = singular(word)
+  const many =
+    IRREGULAR[one] ??
+    (/[^aeiou]y$/.test(one) ? `${one.slice(0, -1)}ies` : /(ch|sh|x)$/.test(one) ? `${one}es` : `${one}s`)
+  return { one, many }
 }
 
 /** First number in a yield string: "6 servings" → 6, "Serves 4-6" → 4. */
@@ -403,6 +550,72 @@ export function stepTimers(step: string): StepTimer[] {
     seen.add(seconds)
     const label = u.startsWith('h') ? `${m[2] ?? m[1]} hr` : u.startsWith('s') ? `${m[2] ?? m[1]} sec` : `${m[2] ?? m[1]} min`
     out.push({ label, seconds })
+  }
+  return out
+}
+
+// --- Whole-ingredient helpers -------------------------------------------------
+
+interface IngredientLike {
+  raw: string
+  alt_raw?: string | null
+  section?: string | null
+}
+
+const lineSystem = (raw: string): UnitSystem | undefined => parseLine(raw).unit?.system
+
+/**
+ * Render an ingredient at a scale and unit system, preferring the recipe
+ * author's own conversion (alt_raw) when it's written in the target system.
+ */
+export function renderIngredient(ing: IngredientLike, factor: number, system: UnitSystem): ScaledLine {
+  if (ing.alt_raw && lineSystem(ing.raw) !== system && lineSystem(ing.alt_raw) === system) {
+    return scaleLine(ing.alt_raw, factor, system)
+  }
+  return scaleLine(ing.raw, factor, system)
+}
+
+/** Heading text for display: "For the Dough:" → "For the Dough". */
+export function sectionTitle(section: string): string {
+  return section.trim().replace(/:\s*$/, '')
+}
+
+/** Consecutive runs of ingredients sharing a section (order preserved). */
+export function groupBySection<T extends IngredientLike>(items: T[]): { section: string | null; items: T[] }[] {
+  const out: { section: string | null; items: T[] }[] = []
+  for (const it of items) {
+    const section = it.section?.trim() || null
+    const last = out[out.length - 1]
+    if (last && last.section === section) last.items.push(it)
+    else out.push({ section, items: [it] })
+  }
+  return out
+}
+
+/** Edit-sheet text: section headings on their own line ending in ":". */
+export function ingredientsToText(items: IngredientLike[]): string {
+  const lines: string[] = []
+  for (const g of groupBySection(items)) {
+    if (g.section) {
+      if (lines.length) lines.push('')
+      lines.push(g.section.trim().endsWith(':') ? g.section.trim() : `${g.section.trim()}:`)
+    }
+    lines.push(...g.items.map((i) => i.raw))
+  }
+  return lines.join('\n')
+}
+
+/** Parse edit-sheet text back: a line ending in ":" with no leading amount is a heading. */
+export function textToIngredients(text: string): { raw: string; section: string | null }[] {
+  let section: string | null = null
+  const out: { raw: string; section: string | null }[] = []
+  for (const line of text.split('\n').map((l) => l.trim())) {
+    if (!line) continue
+    if (line.endsWith(':') && parseLine(line).qty == null) {
+      section = line
+      continue
+    }
+    out.push({ raw: line, section })
   }
   return out
 }

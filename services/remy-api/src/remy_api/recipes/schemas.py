@@ -25,6 +25,8 @@ class ParsedIngredient(BaseModel):
     unit: str | None = None
     food: str | None = None
     note: str | None = None
+    section: str | None = None  # "For the dough:" — the group heading this line sits under
+    alt_raw: str | None = None  # the author's version of this line in the other unit system
 
 
 class ParsedRecipe(BaseModel):
@@ -86,6 +88,7 @@ class IngredientInput(BaseModel):
     unit: str | None = None
     food: str | None = None
     note: str | None = None
+    section: str | None = Field(default=None, max_length=255)
 
 
 class IngredientOut(BaseModel):
@@ -98,6 +101,8 @@ class IngredientOut(BaseModel):
     unit: str | None
     food: str | None
     note: str | None
+    section: str | None = None
+    alt_raw: str | None = None
 
 
 class RecipeSummary(BaseModel):

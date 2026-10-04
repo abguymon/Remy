@@ -206,6 +206,10 @@ class RecipeIngredient(Base):
     unit: Mapped[str | None] = mapped_column(String(64), nullable=True)
     food: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # Ingredient group heading ("For the dough:") and the recipe author's own
+    # conversion of this line into the other unit system, when the page had one.
+    section: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    alt_raw: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     recipe: Mapped[Recipe] = relationship(back_populates="ingredients")
 

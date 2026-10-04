@@ -162,6 +162,8 @@ async def create_recipe(
                 unit=ing.unit,
                 food=ing.food,
                 note=ing.note,
+                section=ing.section,
+                alt_raw=ing.alt_raw,
             )
         )
     session.add(recipe)
@@ -279,6 +281,8 @@ async def update_recipe(
     recipe = await get_recipe(session, user_id, recipe_id)
     _apply_updates(recipe, updates)
     if updates.ingredients is not None:
+        # The author's conversion only still applies to a line left unchanged.
+        previous_alt = {i.raw.strip(): i.alt_raw for i in recipe.ingredients if i.alt_raw}
         recipe.ingredients.clear()
         await session.flush()
         for position, ing in enumerate(updates.ingredients):
@@ -290,6 +294,8 @@ async def update_recipe(
                     unit=ing.unit,
                     food=ing.food,
                     note=ing.note,
+                    section=(ing.section or "").strip() or None,
+                    alt_raw=previous_alt.get(ing.raw.strip()),
                 )
             )
     await session.flush()

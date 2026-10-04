@@ -8,7 +8,7 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { pluralize, shortDate } from '../lib/format'
-import { scaleLine } from '../lib/ingredients'
+import { groupBySection, ingredientsToText, renderIngredient, sectionTitle, textToIngredients } from '../lib/ingredients'
 import ScaleControls, { useScale } from '../components/ScaleControls'
 import { FavoriteButton, NotesCard, StarRating, TagRow } from '../components/RecipeLibrary'
 import { useDeleteRecipe, useMarkCooked, useRecipe, useUpdateRecipe } from '../lib/queries'
@@ -92,7 +92,12 @@ export default function RecipeDetail() {
   if (r.cook_time) stats.push({ label: 'Cook', value: r.cook_time })
   if (r.recipe_yield) {
     const y = yieldStat(r.recipe_yield)
-    stats.push(scale.servings && scale.factor !== 1 ? { label: 'Serves', value: String(scale.servings) } : y)
+    // Scaled: same wording, new number ("12 rolls" → "14 rolls", Serves 6 → Serves 8).
+    stats.push(
+      scale.servings && scale.factor !== 1
+        ? { label: y.label, value: y.label === 'Serves' ? String(scale.servings) : `${scale.servings} ${scale.noun.many}` }
+        : y,
+    )
   }
   if (r.cooked_count > 0) stats.push({ label: 'Made', value: r.cooked_count === 1 ? 'Once' : `${r.cooked_count}×` })
   // Four cells max: Prep/Cook give way first (Total already covers them).
@@ -231,10 +236,17 @@ export default function RecipeDetail() {
                 Ingredients
               </SectionHeading>
               <ScaleControls recipe={r} className="mt-3.5" />
-              <ul className="mt-2">
-                {r.ingredients.map((ing) => {
+              {groupBySection(r.ingredients).map((group, gi) => (
+              <div key={gi}>
+              {group.section && (
+                <h3 className="mt-6 font-serif text-[18px] font-medium leading-tight text-ink">
+                  {sectionTitle(group.section)}
+                </h3>
+              )}
+              <ul className={group.section ? 'mt-1' : 'mt-2'}>
+                {group.items.map((ing) => {
                   const done = ticked.has(ing.id)
-                  const { amount, rest } = scaleLine(ing.raw, scale.factor, scale.system)
+                  const { amount, rest } = renderIngredient(ing, scale.factor, scale.system)
                   return (
                     <li key={ing.id} className="border-b border-line">
                       <button
@@ -267,6 +279,8 @@ export default function RecipeDetail() {
                   )
                 })}
               </ul>
+              </div>
+              ))}
             </section>
           )}
 
@@ -343,14 +357,10 @@ function EditSheet({ recipe, onClose }: { recipe: Recipe; onClose: () => void })
   const [recipeYield, setRecipeYield] = useState(recipe.recipe_yield ?? '')
   const [prep, setPrep] = useState(recipe.prep_time ?? '')
   const [cook, setCook] = useState(recipe.cook_time ?? '')
-  const [ingredients, setIngredients] = useState(recipe.ingredients.map((i) => i.raw).join('\n'))
+  const [ingredients, setIngredients] = useState(ingredientsToText(recipe.ingredients))
   const [instructions, setInstructions] = useState(recipe.instructions.join('\n'))
 
   async function save() {
-    const ingLines = ingredients
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean)
     const stepLines = instructions
       .split('\n')
       .map((l) => l.trim())
@@ -360,7 +370,7 @@ function EditSheet({ recipe, onClose }: { recipe: Recipe; onClose: () => void })
       recipe_yield: recipeYield.trim() || null,
       prep_time: prep.trim() || null,
       cook_time: cook.trim() || null,
-      ingredients: ingLines.map((raw) => ({ raw })),
+      ingredients: textToIngredients(ingredients),
       instructions: stepLines,
     })
     toast('Recipe updated')
@@ -413,7 +423,7 @@ function EditSheet({ recipe, onClose }: { recipe: Recipe; onClose: () => void })
             </label>
           </div>
           <label className="flex flex-col gap-1.5">
-            <span className={labelCls}>Ingredients — one per line</span>
+            <span className={labelCls}>Ingredients — one per line; a line ending in ":" starts a section</span>
             <textarea
               value={ingredients}
               onChange={(e) => setIngredients(e.target.value)}

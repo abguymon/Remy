@@ -20,6 +20,7 @@ from bs4 import BeautifulSoup
 from recipe_scrapers import scrape_html
 
 from remy_api.net import BLOCKED_STATUSES, impersonated_get
+from remy_api.recipes.enrich import align_sections, wprm_alternates
 from remy_api.recipes.llm_fallback import RecipeParseError, StructuredLLM, llm_extract_recipe
 from remy_api.recipes.schemas import ParsedIngredient, ParsedRecipe
 
@@ -129,7 +130,13 @@ def parse_with_scrapers(html: str, url: str) -> ParsedRecipe:
     scraper = scrape_html(html, org_url=url, supported_only=False)
 
     title = _safe(scraper.title) or ""
-    raw_ingredients = _safe(scraper.ingredients) or []
+    raw_ingredients = [str(line).strip() for line in (_safe(scraper.ingredients) or []) if str(line).strip()]
+    groups = _safe(scraper.ingredient_groups) or []
+    sections = align_sections(
+        raw_ingredients,
+        [(getattr(g, "purpose", None), [str(i) for i in getattr(g, "ingredients", [])]) for g in groups],
+    )
+    alternates = wprm_alternates(html, raw_ingredients)
     instructions = _safe(scraper.instructions_list)
     if not instructions:
         block = _safe(scraper.instructions)
@@ -143,7 +150,10 @@ def parse_with_scrapers(html: str, url: str) -> ParsedRecipe:
         prep_time=_fmt_time(_safe(scraper.prep_time)),  # type: ignore[arg-type]
         cook_time=_fmt_time(_safe(scraper.cook_time)),  # type: ignore[arg-type]
         total_time=_fmt_time(_safe(scraper.total_time)),  # type: ignore[arg-type]
-        ingredients=[ParsedIngredient(raw=str(line).strip()) for line in raw_ingredients if str(line).strip()],
+        ingredients=[
+            ParsedIngredient(raw=line, section=section, alt_raw=alt)
+            for line, section, alt in zip(raw_ingredients, sections, alternates, strict=True)
+        ],
         instructions=[str(step).strip() for step in instructions if str(step).strip()],
     )
 

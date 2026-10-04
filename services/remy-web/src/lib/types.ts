@@ -277,6 +277,8 @@ export interface Ingredient {
   unit: string | null
   food: string | null
   note: string | null
+  section: string | null // "For the dough:" group heading
+  alt_raw: string | null // the recipe author's version in the other unit system
 }
 
 export interface RecipeDetail extends RecipeSummary {
@@ -296,7 +298,7 @@ export interface RecipeUpdate {
   cook_time?: string | null
   total_time?: string | null
   instructions?: string[]
-  ingredients?: { raw: string }[]
+  ingredients?: { raw: string; section?: string | null }[]
   is_favorite?: boolean
   rating?: number | null
   notes?: string | null
