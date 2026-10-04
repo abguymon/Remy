@@ -42,6 +42,89 @@
 @tailwind utilities;
 
 @layer base {
+  /* Theme tokens (RGB triplets) — consumed by tailwind.config.js. Light is the
+     default; `html.dark` is set by stores/theme.ts (system / light / dark). */
+  :root {
+    --c-canvas: 236 228 216;
+    --c-cream: 246 240 232;
+    --c-creamsoft: 241 231 216;
+    --c-surface: 255 253 250;
+    --c-chip: 237 229 216;
+    --c-ink: 42 37 32;
+    --c-muted: 107 97 86;
+    --c-faint: 118 108 96;
+    --c-fainter: 167 155 139;
+    --c-hint: 182 171 153;
+    --c-line: 231 223 211;
+    --c-line2: 225 216 201;
+    --c-divider: 240 233 221;
+    --c-tile: 237 228 213;
+    --c-producttile: 255 253 250;
+    --c-dark: 23 19 15;
+    --c-onaccent: 255 255 255;
+    --c-terracotta: 192 91 59;
+    --c-terracotta-dark: 168 74 46;
+    --c-terracotta-deep: 160 73 44;
+    --c-terracotta-soft: 247 230 222;
+    --c-success: 63 122 80;
+    --c-success-bg: 228 240 230;
+    --c-success-dot: 79 138 91;
+    --c-warn: 145 99 18;
+    --c-warn-bg: 247 236 214;
+    --c-warn-dot: 192 138 43;
+    --c-warn-border: 231 211 168;
+    --c-warn-deep: 122 91 18;
+    --c-danger: 168 57 43;
+    --c-danger-bg: 246 223 219;
+    --c-danger-border: 233 196 189;
+    --c-danger-dot: 192 57 43;
+    --c-badge-favbg: 239 234 217;
+    --c-badge-favfg: 122 106 43;
+  }
+  html.dark {
+    --c-canvas: 15 12 10;
+    --c-cream: 22 18 15;
+    --c-creamsoft: 28 23 19;
+    --c-surface: 34 29 24;
+    --c-chip: 44 37 31;
+    --c-ink: 242 234 223;
+    --c-muted: 184 172 155;
+    --c-faint: 163 150 132;
+    --c-fainter: 138 126 111;
+    --c-hint: 125 114 100;
+    --c-line: 53 45 37;
+    --c-line2: 64 55 46;
+    --c-divider: 43 36 30;
+    --c-tile: 44 37 31;
+    --c-producttile: 239 230 218;
+    --c-dark: 11 9 7;
+    --c-onaccent: 26 18 13;
+    --c-terracotta: 217 112 78;
+    --c-terracotta-dark: 229 132 99;
+    --c-terracotta-deep: 240 164 134;
+    --c-terracotta-soft: 58 36 25;
+    --c-success: 125 187 140;
+    --c-success-bg: 30 46 34;
+    --c-success-dot: 111 174 126;
+    --c-warn: 226 182 90;
+    --c-warn-bg: 46 38 24;
+    --c-warn-dot: 214 160 64;
+    --c-warn-border: 74 59 30;
+    --c-warn-deep: 233 214 168;
+    --c-danger: 238 139 124;
+    --c-danger-bg: 58 31 26;
+    --c-danger-border: 90 46 38;
+    --c-danger-dot: 224 108 92;
+    --c-badge-favbg: 46 42 28;
+    --c-badge-favfg: 217 201 138;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+}
+
+
+@layer base {
   html,
   body,
   #root {
@@ -49,14 +132,14 @@
   }
   body {
     margin: 0;
-    background: theme('colors.cream');
-    color: theme('colors.ink');
+    background: rgb(var(--c-cream));
+    color: rgb(var(--c-ink));
     font-family: theme('fontFamily.sans');
     -webkit-font-smoothing: antialiased;
   }
   /* Visible focus for keyboard users (AA) without stealing focus rings on mouse. */
   :focus-visible {
-    outline: 2px solid theme('colors.terracotta.DEFAULT');
+    outline: 2px solid rgb(var(--c-terracotta));
     outline-offset: 2px;
   }
 }
@@ -73,14 +156,18 @@
   }
   /* Skeleton shimmer — matches the prototype's .sk. */
   .sk {
-    background: linear-gradient(90deg, #efe7da 25%, #f6f0e6 37%, #efe7da 63%);
+    background: linear-gradient(
+      90deg,
+      rgb(var(--c-chip)) 25%,
+      rgb(var(--c-cream)) 37%,
+      rgb(var(--c-chip)) 63%
+    );
     background-size: 200% 100%;
     animation: theme('animation.shimmer');
   }
-  /* Recipe/photo placeholder — warm cross-hatch, never a broken image. */
+  /* Recipe/photo placeholder — warm tile + utensil glyph, never a broken image. */
   .photo-fallback {
-    background-color: #eee4d3;
-    background-image: repeating-linear-gradient(135deg, #e9decb 0 11px, #ede3d2 11px 22px);
+    background-color: rgb(var(--c-tile));
   }
   /* Indeterminate app-level progress for async work without granular progress. */
   .activity-bar {

@@ -6,7 +6,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { usePlanState } from '../../lib/queries'
 import type { PlanSnapshot, PlanStatus } from '../../lib/types'
-import { Button, Spinner, StepIndicator } from '../../components/ui'
+import { Spinner, StepIndicator } from '../../components/ui'
+import Icon from '../../components/Icon'
 import Step0Input from './Step0Input'
 import Step1Pick from './Step1Pick'
 import Step2List from './Step2List'
@@ -78,15 +79,19 @@ export default function PlanFlow() {
       <StepIndicator current={viewStep} reachable={liveStep} onStep={setViewStep} />
 
       {lookingBack && (
-        <div className="mx-5 mb-1 flex items-center justify-between gap-2 rounded-[10px] bg-cream px-3 py-2 text-[12px] text-muted ring-1 ring-line">
-          <span>You're looking back at a completed step.</span>
-          <Button
-            variant="ghost"
-            className="!p-0 text-[12px] font-semibold text-terracotta"
+        <div className="mx-5 mb-1 mt-1 flex items-center justify-between gap-3 rounded-[14px] border border-line bg-surface py-1 pl-3.5 pr-1.5 text-[12.5px] text-muted shadow-cardsoft">
+          <span className="flex items-center gap-2">
+            <Icon name="back" size={15} className="flex-none text-faint" />
+            You're looking back at a completed step.
+          </span>
+          <button
+            type="button"
+            className="inline-flex min-h-[40px] flex-none items-center gap-0.5 rounded-[10px] px-2.5 text-[12.5px] font-semibold text-terracotta-deep hover:bg-chip"
             onClick={() => setViewStep(liveStep)}
           >
-            Back to current →
-          </Button>
+            Back to current
+            <Icon name="chevronRight" size={15} strokeWidth={2.4} />
+          </button>
         </div>
       )}
 

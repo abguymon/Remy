@@ -1,7 +1,7 @@
 // The Remy mark — a simple sitting rat. Inherits color via currentColor so it
 // can sit next to the wordmark in any register; eye/inner-ear knock out to the
 // page background via the `hole` prop (defaults to the cream canvas).
-export default function RatIcon({ size = 28, hole = '#F6F0E8', className = '' }: {
+export default function RatIcon({ size = 28, hole = 'rgb(var(--c-cream))', className = '' }: {
   size?: number
   hole?: string
   className?: string

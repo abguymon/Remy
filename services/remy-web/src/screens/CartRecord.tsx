@@ -5,7 +5,8 @@ import { useState } from 'react'
 import { cartHost, money, shortDate } from '../lib/format'
 import { useOrders, useSettings } from '../lib/queries'
 import type { OrderItem, OrderRecord } from '../lib/types'
-import { EmptyState, StatusPill } from '../components/ui'
+import { EmptyState, ScreenHeader, SectionHeading, StatusPill } from '../components/ui'
+import Icon from '../components/Icon'
 import type { PillTone } from '../components/ui'
 
 const DEFAULT_CART_URL = 'https://www.kroger.com/cart'
@@ -48,44 +49,66 @@ export default function CartRecord() {
   // (e.g. fredmeyer.com); fall back to kroger.com before settings load.
   const cartUrl = settings.data?.cart_url ?? DEFAULT_CART_URL
   const cartLabel = cartHost(cartUrl)
+  const count = orders.data?.length ?? 0
 
   return (
-    <div className="px-5 pb-8 pt-3.5">
-      <div className="font-serif text-[28px] font-semibold tracking-tight">Cart</div>
+    <div className="pb-12">
+      <ScreenHeader title="Cart" subtitle="A log of what Remy added for you" />
 
-      <div className="my-3.5 rounded-[12px] border border-line2 bg-badge-favbg px-3.5 py-3 text-[12.5px] leading-snug text-muted">
-        <b className="text-ink">Remy's record.</b> Your real cart lives on{' '}
-        <a
-          href={cartUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="font-semibold text-terracotta"
-        >
-          {cartLabel}
-        </a>{' '}
-        — this is a log of what we added, not a live cart.
+      {/* Permanent honesty label (FR-18): a record, not a live cart. */}
+      <div className="mx-5 mt-5 flex items-start gap-3 rounded-card border border-line bg-surface p-4 shadow-card">
+        <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-chip text-muted">
+          <Icon name="receipt" size={18} />
+        </span>
+        <div className="min-w-0 flex-1 text-[13.5px] leading-snug text-muted">
+          <div className="font-semibold text-ink">Remy's record — not a live cart</div>
+          <div className="mt-0.5">
+            Your real cart lives on{' '}
+            <a
+              href={cartUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-0.5 font-semibold text-terracotta-deep underline-offset-2 hover:underline"
+            >
+              {cartLabel}
+              <Icon name="external" size={13} strokeWidth={2.4} />
+            </a>{' '}
+            — this is a log of what we added.
+          </div>
+        </div>
       </div>
 
-      {orders.isLoading ? (
-        <div className="flex flex-col gap-3">
-          {Array.from({ length: 2 }).map((_, i) => (
-            <div key={i} className="sk h-[92px] rounded-card" />
-          ))}
-        </div>
-      ) : (orders.data?.length ?? 0) === 0 ? (
-        <EmptyState glyph="🛒" message="Nothing ordered yet. Finish a plan and it'll show up here." />
-      ) : (
-        <>
-          <div className="mb-2 text-xs font-bold uppercase tracking-[.06em] text-hint">
-            Order history
-          </div>
-          <div className="flex flex-col gap-2.5">
-            {orders.data!.map((o, i) => (
-              <OrderCard key={o.id} order={o} defaultOpen={i === 0} cartUrl={cartUrl} cartLabel={cartLabel} />
+      <section className="mt-8 px-5">
+        {orders.isLoading ? (
+          <div className="flex flex-col gap-3">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="sk h-[108px] rounded-card" />
             ))}
           </div>
-        </>
-      )}
+        ) : count === 0 ? (
+          <EmptyState icon="cart" message="Nothing ordered yet. Finish a plan and it'll show up here." />
+        ) : (
+          <>
+            <SectionHeading
+              className="mb-3"
+              sub={`${count} ${count === 1 ? 'order' : 'orders'} · totals are estimates`}
+            >
+              Order history
+            </SectionHeading>
+            <div className="flex flex-col gap-3">
+              {orders.data!.map((o, i) => (
+                <OrderCard
+                  key={o.id}
+                  order={o}
+                  defaultOpen={i === 0}
+                  cartUrl={cartUrl}
+                  cartLabel={cartLabel}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </section>
     </div>
   )
 }
@@ -105,47 +128,67 @@ function OrderCard({
   const items = order.items ?? []
 
   return (
-    <div className="overflow-hidden rounded-card border border-line bg-surface shadow-cardsoft">
+    <div className="overflow-hidden rounded-card border border-line bg-surface shadow-card">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="w-full px-4 py-3.5 text-left"
+        className="flex w-full items-start gap-3 px-4 pb-2 pt-3.5 text-left"
         aria-expanded={open}
       >
-        <div className="flex items-baseline justify-between gap-3">
-          <div className="text-[15px] font-semibold">{shortDate(order.created_at) || 'Order'}</div>
-          <div className="tab-fig text-[15px] font-bold">{money(order.estimated_total)}</div>
-        </div>
-        <div className="mt-0.5 text-[12.5px] text-faint">{summarize(items)}</div>
-        <div className="mt-2 flex items-center gap-2 text-[12.5px]">
-          <span className="font-semibold text-terracotta">{open ? 'Hide items' : 'View items'}</span>
-          <span className="text-line2">·</span>
-          <a
-            href={cartUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="font-semibold text-terracotta"
-          >
-            Open {cartLabel}/cart
-          </a>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between gap-3">
+            <div className="font-serif text-[18px] font-medium leading-tight">
+              {shortDate(order.created_at) || 'Order'}
+            </div>
+            <div className="tab-fig text-[15px] font-bold">
+              {order.estimated_total != null && (
+                <span className="mr-1 text-[11.5px] font-semibold text-faint">est.</span>
+              )}
+              {money(order.estimated_total)}
+            </div>
+          </div>
+          <div className="mt-1 text-[12.5px] text-faint">{summarize(items)}</div>
         </div>
       </button>
+      <div className="flex items-center gap-1 px-2 pb-1.5 text-[13px] font-semibold text-terracotta-deep">
+        <button
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="inline-flex min-h-[40px] items-center gap-1 rounded-full px-2"
+        >
+          {open ? 'Hide items' : 'View items'}
+          <Icon
+            name="chevronDown"
+            size={15}
+            strokeWidth={2.4}
+            className={`transition-transform ${open ? 'rotate-180' : ''}`}
+          />
+        </button>
+        <span className="text-line2" aria-hidden>
+          ·
+        </span>
+        <a
+          href={cartUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex min-h-[40px] items-center gap-1 rounded-full px-2"
+        >
+          Open {cartLabel}/cart
+          <Icon name="external" size={14} strokeWidth={2.4} />
+        </a>
+      </div>
 
       {open && items.length > 0 && (
-        <div className="border-t border-divider">
+        <div className="divide-y divide-divider border-t border-divider">
           {items.map((it, idx) => {
             const o = outcome(it.status)
             return (
-              <div
-                key={idx}
-                className="flex items-center gap-2.5 border-b border-divider px-4 py-2.5 last:border-0"
-              >
+              <div key={idx} className="flex items-center gap-2.5 px-4 py-2.5">
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13.5px] text-ink">
                     {it.description || '—'}
                     {it.quantity > 1 && <span className="text-faint"> ×{it.quantity}</span>}
                   </div>
-                  {it.reason && <div className="text-[11.5px] text-faint">{it.reason}</div>}
+                  {it.reason && <div className="text-[12px] text-faint">{it.reason}</div>}
                 </div>
                 {it.price != null && o.added && (
                   <span className="tab-fig text-[13px] font-semibold">

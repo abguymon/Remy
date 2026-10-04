@@ -27,7 +27,7 @@ The user types the meals they want to cook this week; Remy shows ~5 recipe optio
 ## 3. Visual direction
 
 - **Tone:** warm hybrid. A cookbook that behaves like a well-made tool.
-- **Theme:** light only. No dark mode in v1.
+- **Theme:** light and dark (system / light / dark preference in Settings). See §8.
 - **Color:** warm neutral canvas (cream/off-white, warm grays) — not stark white. One warm accent (terracotta / paprika family — nod to the name Remy) for primary actions and the step indicator; a supporting green for "added/success/in-stock", amber for "substituted/low stock", red only for errors and "unavailable/failed". Product/recipe photography supplies most of the color; the chrome stays quiet.
 - **Type:** a friendly serif or serif-adjacent display face for recipe titles and screen headers (editorial warmth); a clean sans for everything interactive and data-dense (lists, prices, buttons, labels). Prices and quantities in tabular figures.
 - **Shape & depth:** soft-rounded cards (12–16px radius), hairline borders + subtle shadow; no heavy neumorphism, no glassmorphism.
@@ -121,4 +121,18 @@ Step indicator (5 steps, tappable-back) · recipe candidate card + skeleton · o
 
 ## 7. Out of scope for design v1
 
-Dark mode; native app chrome; weekly calendar views; dietary/budget UI; ratings/notes on recipes; multi-user account switching (schema supports it later — leave no UI for it now).
+Native app chrome; weekly calendar views; dietary/budget UI; ratings/notes on recipes; multi-user account switching (schema supports it later — leave no UI for it now).
+
+---
+
+## 8. Visual language v2 (Oct 2026 rebrand)
+
+The Cookbook redesign (canvas: https://claude.ai/artifact/8mXoBuvubru4WA1Lv6TtnL, plan: `COOKBOOK_PLAN.md`) set the style for the whole app. Same fonts and palette as v1, pushed further toward an editorial cookbook:
+
+- **Tokens are CSS variables** (`src/index.css`, RGB triplets) consumed by `tailwind.config.js`; `html.dark` swaps every token. Never hard-code hex/rgba or `white`/`black` in screens — use tokens (`text-onaccent` on terracotta fills, `bg-dark/50` for scrims, `bg-surface/85` for glass buttons over photos).
+- **Type:** screen titles Newsreader 34px/500, tracking −0.02em (`ScreenHeader`); section headings Newsreader 22px/500 (`SectionHeading`); recipe/card titles Newsreader 15.5–18px/500. Body/UI Hanken Grotesk 13–16px. Eyebrows 11.5px bold uppercase, `text-faint` or `text-muted` (never `text-hint` for text — fails AA).
+- **Icons:** stroke SVGs from `components/Icon.tsx` (24 grid, `currentColor`). **No emoji** anywhere in the UI.
+- **Shape:** cards 16px (`rounded-card`), panels/sheets 20px (`rounded-panel`), buttons 14px, chips fully round, icon buttons 44px circles (`IconButton`). Hairline `border-line` + at most `shadow-card`.
+- **Controls:** pill `Chip`s (active = ink fill), `SegmentedControl` (chip track, surface thumb), 44px minimum targets, primary CTA 52–54px tall.
+- **Photography first** in the browse register: generous image heights, rounded 14–16px, text below images (scrim pills only for short badges). Missing photos use `PhotoFallback` (tile + utensil glyph).
+- **Edit register** (list/cart review, settings) stays dense and crisp, but uses the same surfaces, radii, icons and headings.

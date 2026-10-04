@@ -22,10 +22,22 @@ import type {
 } from '../../lib/types'
 import { money } from '../../lib/format'
 import { toast } from '../../stores/toast'
-import { Button, SectionLabel, Spinner } from '../../components/ui'
+import {
+  Button,
+  DegradedBanner,
+  IconButton,
+  SectionHeading,
+  SectionLabel,
+  SegmentedControl,
+  Spinner,
+} from '../../components/ui'
+import Icon from '../../components/Icon'
 
 const MAX_IMPORT_FILES = 6
 const MAX_IMPORT_BYTES = 15_000_000
+
+const inputClass =
+  'h-11 w-full min-w-0 rounded-[12px] border border-line2 bg-cream px-3.5 text-[14px] text-ink outline-none placeholder:text-faint focus:border-terracotta'
 
 const SOURCE_BADGE: Record<string, string> = {
   order: 'Ordered',
@@ -38,13 +50,13 @@ const SOURCE_BADGE: Record<string, string> = {
 function ProductThumb({ src, size = 52 }: { src?: string | null; size?: number }) {
   return (
     <span
-      className="flex flex-none items-center justify-center overflow-hidden rounded-[10px] border border-tile bg-white"
+      className="flex flex-none items-center justify-center overflow-hidden rounded-[12px] border border-line bg-surface"
       style={{ width: size, height: size }}
     >
       {src ? (
-        <img src={src} alt="" className="h-full w-full object-contain p-1" />
+        <img src={src} alt="" className="h-full w-full rounded-[10px] object-contain p-1" />
       ) : (
-        <span className="font-mono text-[8px] text-hint">img</span>
+        <Icon name="bag" size={Math.round(size * 0.4)} className="text-faint" />
       )}
     </span>
   )
@@ -59,25 +71,28 @@ export default function UsualsSettings({ settings }: { settings: SettingsRespons
   const rows = usuals.data ?? []
 
   return (
-    <div className="mt-6">
-      <SectionLabel className="mb-2">Usuals</SectionLabel>
-      <div className="rounded-card border border-line bg-surface p-4">
-        <div className="text-[13px] leading-relaxed text-muted">
-          Products Remy reaches for first when it recognizes an ingredient — built from what you
-          order and swap. Pin favorites or import your order history to jump-start it.
-        </div>
-
+    <section className="mt-9 px-5">
+      <SectionHeading
+        className="mb-3"
+        sub="Products Remy reaches for first when it recognizes an ingredient — built from what you order and swap. Pin favorites or import your order history to jump-start it."
+      >
+        Usuals
+      </SectionHeading>
+      <div className="divide-y divide-divider overflow-hidden rounded-card border border-line bg-surface shadow-card">
         {/* Current usuals list */}
         {usuals.isLoading ? (
-          <div className="mt-4 flex items-center gap-2 text-[13px] text-muted">
+          <div className="flex items-center gap-2 px-4 py-4 text-[13.5px] text-muted">
             <Spinner /> Loading…
           </div>
         ) : rows.length === 0 ? (
-          <div className="mt-4 rounded-[11px] border border-dashed border-line2 bg-cream/60 px-3.5 py-4 text-center text-[13px] text-muted">
+          <div className="flex flex-col items-center gap-2 px-4 py-6 text-center text-[13.5px] text-muted">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-chip text-muted">
+              <Icon name="bag" size={19} />
+            </span>
             No usuals yet. Add one below, or import your order history.
           </div>
         ) : (
-          <ul className="mt-4 flex flex-col gap-2">
+          <ul className="divide-y divide-divider">
             {rows.map((u) => (
               <UsualRow
                 key={`${u.food_key}-${u.upc}`}
@@ -102,14 +117,21 @@ export default function UsualsSettings({ settings }: { settings: SettingsRespons
         {/* Import from order history */}
         <button
           onClick={() => setImportOpen(true)}
-          className="mt-3 w-full rounded-[11px] border border-dashed border-[#D8CDB9] bg-transparent py-3 text-[13px] font-semibold text-terracotta"
+          className="flex min-h-[60px] w-full items-center gap-3 px-4 py-3 text-left hover:bg-cream"
         >
-          ⬆ Import from order history
+          <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-terracotta-soft text-terracotta-deep">
+            <Icon name="upload" size={18} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[14.5px] font-semibold text-ink">Import from order history</span>
+            <span className="block text-[12.5px] text-faint">Receipt photo, screenshot, PDF or pasted text</span>
+          </span>
+          <Icon name="chevronRight" size={18} className="flex-none text-faint" />
         </button>
       </div>
 
       {importOpen && <ImportSheet hasStore={hasStore} onClose={() => setImportOpen(false)} />}
-    </div>
+    </section>
   )
 }
 
@@ -124,30 +146,34 @@ function UsualRow({
 }) {
   const badge = SOURCE_BADGE[usual.source] ?? usual.source
   return (
-    <li className="flex items-center gap-3 rounded-[12px] border border-line2 bg-cream/50 p-2.5">
+    <li className="flex items-center gap-3 py-2.5 pl-3 pr-2">
       <ProductThumb src={usual.image_url} />
       <div className="min-w-0 flex-1">
         <div className="truncate text-[13.5px] font-semibold text-ink">
           {usual.description ?? usual.food_key}
         </div>
-        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11.5px] text-faint">
-          {usual.size && <span>{usual.size}</span>}
-          {usual.size && <span>·</span>}
-          <span className="rounded bg-badge-webbg px-1.5 py-[1px] font-semibold text-muted">
+        <div className="mt-1 flex items-center gap-1.5 overflow-hidden text-[12px] text-faint">
+          <span className="flex-none rounded-full bg-chip px-2 py-[1px] text-[11.5px] font-semibold text-muted">
             {badge}
           </span>
-          {usual.times_ordered >= 2 && <span>· ordered {usual.times_ordered}×</span>}
+          <span className="truncate">
+            {[usual.size, usual.times_ordered >= 2 ? `${usual.times_ordered}× ordered` : null]
+              .filter(Boolean)
+              .join(' · ')}
+          </span>
         </div>
       </div>
       <span className="tab-fig flex-none text-[13px] font-bold text-ink">{money(usual.last_price)}</span>
-      <button
-        aria-label={`Remove ${usual.description ?? usual.food_key}`}
+      <IconButton
+        icon="x"
+        variant="plain"
+        size={36}
+        iconSize={16}
+        label={`Remove ${usual.description ?? usual.food_key}`}
         disabled={busy}
         onClick={onRemove}
-        className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-line2 text-[13px] leading-none text-muted disabled:opacity-50"
-      >
-        ✕
-      </button>
+        className="text-faint"
+      />
     </li>
   )
 }
@@ -192,20 +218,32 @@ function AddUsual({ hasStore }: { hasStore: boolean }) {
   const results = search.data ?? []
 
   return (
-    <div className="mt-4 border-t border-divider pt-4">
-      <SectionLabel tone="terracotta" className="mb-2">
-        Add a usual
-      </SectionLabel>
+    <div className="p-4">
+      <SectionLabel className="mb-2">Add a usual</SectionLabel>
       <div className="flex gap-2">
-        <input
-          placeholder="Search products (e.g. whole milk)"
-          value={term}
-          onChange={(e) => setTerm(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && run()}
-          className="flex-1 rounded-[10px] border border-line2 bg-cream px-3 py-2.5 text-sm outline-none focus:border-terracotta"
-        />
-        <Button className="px-4 py-2.5 text-sm" onClick={run} disabled={search.isPending || !hasStore}>
-          {search.isPending ? '…' : 'Search'}
+        <div className="relative min-w-0 flex-1">
+          <Icon
+            name="search"
+            size={17}
+            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-faint"
+          />
+          <input
+            placeholder="Search, e.g. whole milk"
+            aria-label="Search products"
+            value={term}
+            onChange={(e) => setTerm(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && run()}
+            className={`${inputClass} pl-10`}
+          />
+        </div>
+        <Button
+          className="h-11 flex-none px-4 text-[13.5px]"
+          onClick={run}
+          disabled={!hasStore}
+          busy={search.isPending}
+          busyLabel="…"
+        >
+          Search
         </Button>
       </div>
       {!hasStore && (
@@ -218,13 +256,13 @@ function AddUsual({ hasStore }: { hasStore: boolean }) {
       )}
 
       {results.length > 0 && (
-        <ul className="mt-3 flex flex-col gap-2">
+        <ul className="mt-3 divide-y divide-divider overflow-hidden rounded-[14px] border border-line2">
           {results.map((p) => (
             <li key={p.upc}>
               <button
                 disabled={pin.isPending}
                 onClick={() => pinProduct(p)}
-                className="flex w-full items-center gap-3 rounded-[12px] border border-line2 bg-surface p-2.5 text-left hover:bg-cream disabled:opacity-60"
+                className="flex w-full items-center gap-3 p-2.5 text-left hover:bg-cream disabled:opacity-60"
               >
                 <ProductThumb src={p.image_url} size={46} />
                 <div className="min-w-0 flex-1">
@@ -234,7 +272,12 @@ function AddUsual({ hasStore }: { hasStore: boolean }) {
                 <span className="tab-fig flex-none text-[13px] font-bold text-ink">
                   {money(p.price)}
                 </span>
-                <span className="flex-none text-[16px] font-semibold text-terracotta">＋</span>
+                <span
+                  aria-hidden
+                  className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-terracotta-soft text-terracotta-deep"
+                >
+                  <Icon name="plus" size={16} strokeWidth={2.4} />
+                </span>
               </button>
             </li>
           ))}
@@ -255,30 +298,53 @@ function ImportSheet({ hasStore, onClose }: { hasStore: boolean; onClose: () => 
 
   return (
     <div
-      className="fixed inset-0 z-30 flex animate-pop items-end justify-center sm:items-center"
-      style={{ background: 'rgba(40,30,20,.4)' }}
+      className="fixed inset-0 z-30 flex animate-pop items-end justify-center bg-dark/50 sm:items-center sm:p-6"
       onClick={() => {
         if (!busy.current) onClose()
       }}
     >
       <div
-        className="max-h-[92%] w-full max-w-[420px] overflow-y-auto rounded-t-[22px] bg-surface p-[22px] shadow-modal sm:rounded-[18px]"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Import order history"
+        className="max-h-[92%] w-full max-w-[440px] overflow-y-auto rounded-t-panel bg-surface p-6 shadow-modal sm:rounded-panel"
         onClick={(e) => e.stopPropagation()}
       >
         {review ? (
           <ImportReview items={review} onClose={onClose} onBack={() => setReview(null)} />
         ) : (
           <>
-            <div className="font-serif text-xl font-semibold">Import order history</div>
+            <div className="flex items-start justify-between gap-3">
+              <div className="font-serif text-[22px] font-medium tracking-[-0.01em]">
+                Import order history
+              </div>
+              <IconButton
+                icon="x"
+                variant="plain"
+                size={36}
+                iconSize={18}
+                label="Close"
+                className="-mr-2 -mt-1 text-muted"
+                onClick={() => {
+                  if (!busy.current) onClose()
+                }}
+              />
+            </div>
             {!hasStore && (
-              <div className="mt-3 rounded-[10px] border border-warn-border bg-warn-bg px-3 py-2.5 text-[12.5px] text-warn">
-                Select a store in Settings first so we can match products.
+              <div className="mt-3">
+                <DegradedBanner>Select a store in Settings first so we can match products.</DegradedBanner>
               </div>
             )}
-            <div className="mt-3 flex gap-1 rounded-[11px] border border-line2 bg-cream p-1">
-              <ModeTab active={mode === 'upload'} onClick={() => setMode('upload')} label="Upload" />
-              <ModeTab active={mode === 'text'} onClick={() => setMode('text')} label="Paste text" />
-            </div>
+            <SegmentedControl<ImportMode>
+              label="Import source"
+              className="mt-4"
+              value={mode}
+              onChange={setMode}
+              options={[
+                { value: 'upload', label: <><Icon name="camera" size={16} />Upload</> },
+                { value: 'text', label: <><Icon name="list" size={16} />Paste text</> },
+              ]}
+            />
             {mode === 'upload' ? (
               <ImportUpload
                 disabled={!hasStore}
@@ -296,17 +362,6 @@ function ImportSheet({ hasStore, onClose }: { hasStore: boolean; onClose: () => 
         )}
       </div>
     </div>
-  )
-}
-
-function ModeTab({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex-1 rounded-[9px] py-2 text-[13px] font-semibold ${active ? 'bg-surface text-ink shadow-sm' : 'text-muted'}`}
-    >
-      {label}
-    </button>
   )
 }
 
@@ -368,8 +423,8 @@ function ImportUpload({
         Upload a photo, screenshot, or PDF of a receipt or order-history page.
       </div>
       {(localError || error) && (
-        <div className="mt-3 rounded-[10px] border border-danger-border bg-danger-bg px-3 py-2.5 text-[13px] text-danger">
-          {localError || error}
+        <div className="mt-3">
+          <DegradedBanner tone="danger">{localError || error}</DegradedBanner>
         </div>
       )}
       <input
@@ -382,21 +437,22 @@ function ImportUpload({
         onChange={(e) => addFiles(e.target.files)}
       />
       {files.length > 0 && (
-        <ul className="mt-3 flex flex-col gap-2">
+        <ul className="mt-3 divide-y divide-divider overflow-hidden rounded-[14px] border border-line2">
           {files.map((f, i) => (
-            <li
-              key={`${f.name}-${i}`}
-              className="flex items-center gap-2.5 rounded-[11px] border border-line2 bg-cream p-2"
-            >
-              <span className="text-[18px]">{f.type.startsWith('image/') ? '🧾' : '📄'}</span>
-              <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink">{f.name}</span>
-              <button
-                aria-label="Remove"
+            <li key={`${f.name}-${i}`} className="flex items-center gap-2.5 py-1.5 pl-3 pr-1.5">
+              <span className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-chip text-muted">
+                <Icon name={f.type.startsWith('image/') ? 'camera' : 'file'} size={16} />
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{f.name}</span>
+              <IconButton
+                icon="x"
+                variant="plain"
+                size={36}
+                iconSize={16}
+                label={`Remove ${f.name}`}
+                className="text-faint"
                 onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
-                className="rounded-[7px] px-2 py-1 text-[13px] text-danger"
-              >
-                ✕
-              </button>
+              />
             </li>
           ))}
         </ul>
@@ -404,9 +460,10 @@ function ImportUpload({
       <button
         onClick={() => inputRef.current?.click()}
         disabled={pending || files.length >= MAX_IMPORT_FILES}
-        className="mt-3 w-full rounded-[11px] border border-dashed border-[#D8CDB9] bg-transparent py-3 text-[13px] font-semibold text-terracotta disabled:opacity-40"
+        className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-[14px] border border-dashed border-line2 bg-transparent text-[13.5px] font-semibold text-terracotta-deep hover:bg-cream disabled:opacity-40"
       >
-        {files.length === 0 ? '＋ Choose receipt or screenshot' : '＋ Add another'}
+        <Icon name="plus" size={16} strokeWidth={2.4} />
+        {files.length === 0 ? 'Choose receipt or screenshot' : 'Add another'}
       </button>
       {pending && (
         <div className="mt-3 flex items-center gap-2 text-[12.5px] text-muted">
@@ -414,7 +471,7 @@ function ImportUpload({
         </div>
       )}
       <Button
-        className="mt-4 w-full py-3 text-sm"
+        className="mt-4 h-12 w-full text-[14.5px]"
         disabled={disabled || pending || files.length === 0}
         onClick={() => submit({ files })}
       >
@@ -442,8 +499,8 @@ function ImportText({
         Paste your order history or a receipt — one item per line works best.
       </div>
       {error && (
-        <div className="mt-3 rounded-[10px] border border-danger-border bg-danger-bg px-3 py-2.5 text-[13px] text-danger">
-          {error}
+        <div className="mt-3">
+          <DegradedBanner tone="danger">{error}</DegradedBanner>
         </div>
       )}
       <textarea
@@ -451,7 +508,8 @@ function ImportText({
         onChange={(e) => setText(e.target.value)}
         placeholder={'Whole Milk 1 gal\nLarge Eggs 12 ct\nBananas\n…'}
         rows={6}
-        className="mt-3 w-full resize-y rounded-[11px] border border-line2 bg-cream px-3.5 py-3 text-sm outline-none focus:border-terracotta"
+        aria-label="Order history text"
+        className="mt-3 w-full resize-y rounded-[14px] border border-line2 bg-cream px-3.5 py-3 text-[14px] text-ink outline-none placeholder:text-faint focus:border-terracotta"
       />
       {pending && (
         <div className="mt-3 flex items-center gap-2 text-[12.5px] text-muted">
@@ -459,7 +517,7 @@ function ImportText({
         </div>
       )}
       <Button
-        className="mt-4 w-full py-3 text-sm"
+        className="mt-4 h-12 w-full text-[14.5px]"
         disabled={disabled || pending || !text.trim()}
         onClick={() => submit({ text })}
       >
@@ -535,16 +593,14 @@ function ImportReview({
 
   return (
     <>
-      <div className="font-serif text-xl font-semibold">Review matches</div>
+      <div className="font-serif text-[22px] font-medium tracking-[-0.01em]">Review matches</div>
       <div className="mt-1 text-[13px] text-muted">
         Pick the right product for each item, or exclude ones you don't want.
       </div>
       <ul className="mt-4 flex flex-col gap-3">
         {choices.map((c, i) => (
-          <li key={`${c.food_key}-${i}`} className="rounded-[12px] border border-line2 bg-cream/50 p-3">
-            <div className="text-[11.5px] font-semibold uppercase tracking-[.04em] text-faint">
-              {c.extracted_name}
-            </div>
+          <li key={`${c.food_key}-${i}`} className="rounded-card border border-line bg-cream p-3">
+            <SectionLabel>{c.extracted_name}</SectionLabel>
             {c.options.length === 0 ? (
               <div className="mt-1.5 text-[12.5px] text-muted">No product match — will be skipped.</div>
             ) : (
@@ -555,8 +611,9 @@ function ImportReview({
                     <button
                       key={p.upc}
                       onClick={() => setSelected(i, active ? null : p.upc)}
-                      className={`flex items-center gap-2.5 rounded-[10px] border p-2 text-left ${
-                        active ? 'border-terracotta bg-surface' : 'border-line2 bg-surface/60'
+                      aria-pressed={active}
+                      className={`flex items-center gap-2.5 rounded-[12px] border p-2 text-left ${
+                        active ? 'border-terracotta bg-surface ring-1 ring-terracotta' : 'border-line bg-surface/70'
                       }`}
                     >
                       <ProductThumb src={p.image_url} size={40} />
@@ -568,11 +625,11 @@ function ImportReview({
                       </span>
                       <span className="tab-fig flex-none text-[12.5px] font-bold">{money(p.price)}</span>
                       <span
-                        className={`flex h-5 w-5 flex-none items-center justify-center rounded-full text-[11px] ${
-                          active ? 'bg-terracotta text-white' : 'border border-line2 text-transparent'
+                        className={`flex h-6 w-6 flex-none items-center justify-center rounded-full ${
+                          active ? 'bg-terracotta text-onaccent' : 'border border-line2 text-transparent'
                         }`}
                       >
-                        ✓
+                        <Icon name="check" size={14} strokeWidth={3} />
                       </span>
                     </button>
                   )
@@ -583,11 +640,11 @@ function ImportReview({
         ))}
       </ul>
       <div className="mt-4 flex gap-2.5">
-        <Button variant="secondary" className="flex-1 py-3 text-sm" onClick={onBack}>
+        <Button variant="secondary" className="h-12 flex-1 text-sm" onClick={onBack}>
           Back
         </Button>
         <Button
-          className="flex-1 py-3 text-sm"
+          className="h-12 flex-1 text-sm"
           disabled={confirm.isPending}
           onClick={confirmImport}
         >

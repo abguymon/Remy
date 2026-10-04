@@ -10,14 +10,15 @@ import { toast } from '../../stores/toast'
 import {
   AuthedImage,
   Button,
-  CandidateSkeleton,
   DegradedBanner,
   EmptyState,
   OriginBadge,
   PhotoFallback,
+  ScreenHeader,
   Spinner,
   StickyBar,
 } from '../../components/ui'
+import Icon from '../../components/Icon'
 
 type Choice = { choice: 'candidate' | 'url' | 'skip'; candidate_id?: string; url?: string }
 
@@ -115,19 +116,16 @@ export default function Step1Pick({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="no-scrollbar flex-1 overflow-y-auto pb-8">
-        <div className="px-[22px] pb-1.5 pt-1.5">
-          <div className="font-serif text-[26px] font-semibold tracking-tight">
-            Pick your recipes
+        <ScreenHeader
+          className="!pt-4"
+          title="Pick your recipes"
+          subtitle="One per meal — or skip. We save the ones you pick to your cookbook."
+        />
+        {discovering && (
+          <div className="mt-2.5 flex items-center gap-2 px-5 text-[12.5px] text-muted">
+            <Spinner /> Finding recipes for each meal…
           </div>
-          <div className="mt-0.5 text-sm text-muted">
-            One per meal — or skip. We save the ones you pick to your cookbook.
-          </div>
-          {discovering && (
-            <div className="mt-2 flex items-center gap-2 text-xs text-fainter">
-              <Spinner /> Finding recipes for each meal…
-            </div>
-          )}
-        </div>
+        )}
 
         {snapshot.meals.map((meal) => (
           <MealSection
@@ -146,20 +144,24 @@ export default function Step1Pick({
         ))}
       </div>
 
-      <StickyBar>
-        <Button
-          className="w-full py-3.5 text-[15.5px] font-bold"
-          busy={submit.isPending}
-          disabled={!canContinue}
-          onClick={onContinue}
-        >
-          {submit.isPending
-            ? 'Saving…'
-            : discovering
-              ? 'Finding recipes…'
-              : `Continue with ${selectedCount} ${selectedCount === 1 ? 'recipe' : 'recipes'}`}
-        </Button>
-      </StickyBar>
+      {/* Pinned to the bottom of the app's scrolling <main> so the action
+          (and the live total) stays in reach while the list scrolls. */}
+      <div className="sticky bottom-0 z-10">
+        <StickyBar>
+          <Button
+            className="h-[54px] w-full text-[16px] font-bold"
+            busy={submit.isPending}
+            disabled={!canContinue}
+            onClick={onContinue}
+          >
+            {submit.isPending
+              ? 'Saving…'
+              : discovering
+                ? 'Finding recipes…'
+                : `Continue with ${selectedCount} ${selectedCount === 1 ? 'recipe' : 'recipes'}`}
+          </Button>
+        </StickyBar>
+      </div>
     </div>
   )
 }
@@ -196,111 +198,154 @@ function MealSection({
   const cands = candidates?.candidates ?? []
 
   return (
-    <div className={`mt-4 ${skipped ? 'opacity-55' : ''}`}>
-      <div className="flex items-baseline justify-between px-[22px] pb-2.5">
-        <div className="font-serif text-[19px] font-semibold tracking-tight">{title}</div>
+    <section className="mt-8">
+      <div className="flex items-end justify-between gap-3 px-5 pb-3">
+        <h2
+          className={`min-w-0 font-serif text-[22px] font-medium leading-tight tracking-[-0.01em] ${
+            skipped ? 'text-faint line-through decoration-1' : ''
+          }`}
+        >
+          {title}
+        </h2>
         {live && (
           <button
+            type="button"
             onClick={onSkip}
-            className="text-[12.5px] font-semibold text-muted hover:text-ink"
+            aria-pressed={skipped}
+            className="-my-1 flex min-h-[44px] flex-none items-center"
           >
-            {skipped ? 'Skipped · undo' : 'Skip'}
+            <span
+              className={`inline-flex h-8 items-center gap-1 rounded-full border px-3 text-[12.5px] font-semibold ${
+                skipped
+                  ? 'border-ink bg-ink text-cream'
+                  : 'border-line bg-surface text-muted hover:text-ink'
+              }`}
+            >
+              {skipped ? (
+                <>
+                  <Icon name="refresh" size={13} strokeWidth={2.4} />
+                  Skipped · undo
+                </>
+              ) : (
+                'Skip'
+              )}
+            </span>
           </button>
         )}
       </div>
 
-      {selection?.status === 'error' && (
-        <div className="mx-[22px] mb-2.5">
-          <DegradedBanner tone="danger" onRetry={live ? onRetry : undefined} retrying={retrying}>
-            Couldn't read that recipe{selection.error ? ` — ${selection.error}` : ''}. Try another.
-          </DegradedBanner>
-        </div>
-      )}
-
-      {status === 'degraded' && (
-        <div className="mx-[22px] mb-2.5">
-          <DegradedBanner onRetry={live ? onRetry : undefined} retrying={retrying}>
-            {candidates?.source_errors?.[0] ?? 'Some sources failed — showing what we found.'}
-          </DegradedBanner>
-        </div>
-      )}
-      {status === 'error' && (
-        <div className="mx-[22px] mb-2.5">
-          <DegradedBanner tone="danger" onRetry={live ? onRetry : undefined} retrying={retrying}>
-            {candidates?.source_errors?.[0] ?? 'Search failed for this meal.'}
-          </DegradedBanner>
-        </div>
-      )}
-
-      {loading ? (
-        <>
-          <div className="no-scrollbar flex gap-3 overflow-x-auto px-[22px] pb-3.5">
-            <CandidateSkeleton />
-            <CandidateSkeleton />
+      <div className={skipped ? 'opacity-50' : ''}>
+        {selection?.status === 'error' && (
+          <div className="mx-5 mb-3">
+            <DegradedBanner tone="danger" onRetry={live ? onRetry : undefined} retrying={retrying}>
+              Couldn't read that recipe{selection.error ? ` — ${selection.error}` : ''}. Try another.
+            </DegradedBanner>
           </div>
-          <div className="flex items-center gap-2 px-[22px] text-xs text-fainter">
-            <Spinner /> Searching for "{title}"…
-          </div>
-        </>
-      ) : cands.length === 0 ? (
-        <div className="px-[22px]">
-          <EmptyState
-            glyph="🔍"
-            message="Nothing good found — try rewording, or paste a recipe URL below."
-          />
-        </div>
-      ) : (
-        <div className="no-scrollbar flex snap-x snap-mandatory gap-3 overflow-x-auto px-[22px] pb-3.5 lg:grid lg:grid-cols-5 lg:overflow-visible lg:px-4">
-          {cands.map((c) => (
-            <CandidateCard
-              key={c.id}
-              candidate={c}
-              selected={choice?.choice === 'candidate' && choice.candidate_id === c.id}
-              disabled={!live}
-              onPick={() => onPick(c.id)}
-            />
-          ))}
-        </div>
-      )}
+        )}
 
-      <div className="px-[22px]">
-        {urlOpen ? (
-          <div className="flex gap-2">
-            <input
-              autoFocus
-              value={urlText}
-              onChange={(e) => setUrlText(e.target.value)}
-              placeholder="https://…"
-              className="flex-1 rounded-[9px] border border-line2 bg-surface px-3 py-2 text-[13px] outline-none focus:border-terracotta"
+        {status === 'degraded' && (
+          <div className="mx-5 mb-3">
+            <DegradedBanner onRetry={live ? onRetry : undefined} retrying={retrying}>
+              {candidates?.source_errors?.[0] ?? 'Some sources failed — showing what we found.'}
+            </DegradedBanner>
+          </div>
+        )}
+        {status === 'error' && (
+          <div className="mx-5 mb-3">
+            <DegradedBanner tone="danger" onRetry={live ? onRetry : undefined} retrying={retrying}>
+              {candidates?.source_errors?.[0] ?? 'Search failed for this meal.'}
+            </DegradedBanner>
+          </div>
+        )}
+
+        {loading ? (
+          <>
+            <div className="no-scrollbar flex gap-3.5 overflow-x-auto px-5 pb-3 pt-1 lg:grid lg:grid-cols-3 lg:overflow-visible">
+              <CardSkeleton />
+              <CardSkeleton />
+              <CardSkeleton />
+            </div>
+            <div className="flex items-center gap-2 px-5 text-[12.5px] text-muted">
+              <Spinner /> Searching for "{title}"…
+            </div>
+          </>
+        ) : cands.length === 0 ? (
+          <div className="px-5">
+            <EmptyState
+              icon="search"
+              message="Nothing good found — try rewording, or paste a recipe URL below."
             />
-            <Button
-              className="px-3 py-2 text-[12.5px]"
-              disabled={!urlText.trim()}
-              onClick={() => {
-                onUrl(urlText.trim())
-                setUrlOpen(false)
-                toast('Recipe URL set for this meal')
-              }}
-            >
-              Use
-            </Button>
           </div>
         ) : (
-          live && (
-            <button
-              onClick={() => setUrlOpen(true)}
-              className="rounded-[9px] border border-dashed border-line2 px-3 py-2 text-[12.5px] font-semibold text-muted hover:text-ink"
-            >
-              ＋ Use a recipe URL instead
-            </button>
-          )
-        )}
-        {choice?.choice === 'url' && !urlOpen && (
-          <div className="mt-2 truncate text-[12px] text-muted">
-            Using: <span className="font-medium text-ink">{choice.url}</span>
+          <div className="no-scrollbar flex snap-x snap-mandatory scroll-px-5 gap-3.5 overflow-x-auto px-5 pb-1 pt-1 lg:grid lg:grid-cols-3 lg:gap-x-4 lg:gap-y-5 lg:overflow-visible">
+            {cands.map((c) => (
+              <CandidateCard
+                key={c.id}
+                candidate={c}
+                selected={choice?.choice === 'candidate' && choice.candidate_id === c.id}
+                disabled={!live}
+                onPick={() => onPick(c.id)}
+              />
+            ))}
           </div>
         )}
+
+        <div className="px-5">
+          {urlOpen ? (
+            <div className="flex gap-2">
+              <input
+                autoFocus
+                value={urlText}
+                onChange={(e) => setUrlText(e.target.value)}
+                placeholder="https://…"
+                aria-label="Recipe URL"
+                className="h-11 min-w-0 flex-1 rounded-[12px] border border-line2 bg-surface px-3.5 text-[14px] text-ink outline-none placeholder:text-faint focus:border-terracotta"
+              />
+              <Button
+                className="h-11 px-4 text-[13.5px]"
+                disabled={!urlText.trim()}
+                onClick={() => {
+                  onUrl(urlText.trim())
+                  setUrlOpen(false)
+                  toast('Recipe URL set for this meal')
+                }}
+              >
+                Use
+              </Button>
+            </div>
+          ) : (
+            live && (
+              <button
+                type="button"
+                onClick={() => setUrlOpen(true)}
+                className="inline-flex h-11 items-center gap-1.5 rounded-full border border-dashed border-line2 px-4 text-[13px] font-semibold text-muted hover:border-terracotta hover:text-terracotta-deep"
+              >
+                <Icon name="link" size={15} />
+                Use a recipe URL instead
+              </button>
+            )
+          )}
+          {choice?.choice === 'url' && !urlOpen && (
+            <div className="mt-2.5 flex min-w-0 items-center gap-2 rounded-[12px] border border-terracotta/40 bg-terracotta-soft px-3 py-2 text-[12.5px] text-terracotta-deep">
+              <Icon name="link" size={14} className="flex-none" />
+              <span className="flex-none">Using:</span>
+              <span className="truncate font-semibold">{choice.url}</span>
+            </div>
+          )}
+        </div>
       </div>
+    </section>
+  )
+}
+
+// Skeleton sized to the v2 candidate card (photo 4:3 + badge + title lines).
+function CardSkeleton({ className = '' }: { className?: string }) {
+  return (
+    <div className={`w-[236px] flex-none lg:w-auto ${className}`} aria-hidden>
+      <div className="sk aspect-[4/3] rounded-card" />
+      <div className="sk mt-3 h-4 w-14 rounded-full" />
+      <div className="sk mt-2 h-3.5 w-[90%] rounded" />
+      <div className="sk mt-1.5 h-3.5 w-[60%] rounded" />
     </div>
   )
 }
@@ -317,15 +362,19 @@ function CandidateCard({
   onPick: () => void
 }) {
   return (
-    <div className="w-[210px] flex-none snap-start lg:w-auto">
+    <div className="w-[236px] flex-none snap-start lg:w-auto">
       <button
+        type="button"
         onClick={onPick}
         disabled={disabled}
-        className="block w-full text-left disabled:cursor-default"
+        aria-pressed={selected}
+        className="group block w-full text-left disabled:cursor-default"
       >
         <div
-          className={`relative h-[150px] overflow-hidden rounded-card border ${
-            selected ? 'border-terracotta ring-2 ring-terracotta' : 'border-line2'
+          className={`relative aspect-[4/3] overflow-hidden rounded-card transition-shadow ${
+            selected
+              ? 'ring-[2.5px] ring-terracotta ring-offset-2 ring-offset-cream'
+              : 'ring-1 ring-line'
           }`}
         >
           {/* Recipe and cached search thumbnails are served by
@@ -336,19 +385,30 @@ function CandidateCard({
           ) : (
             <PhotoFallback src={candidate.thumbnail} alt={candidate.title} />
           )}
-          {selected && (
-            <span className="absolute right-2 top-2 flex h-[26px] w-[26px] items-center justify-center rounded-full bg-terracotta text-[15px] font-bold text-white shadow">
-              ✓
+          {selected ? (
+            <span className="absolute right-2.5 top-2.5 flex h-8 w-8 items-center justify-center rounded-full bg-terracotta text-onaccent shadow-terracotta">
+              <Icon name="check" size={17} strokeWidth={3} />
+            </span>
+          ) : (
+            !disabled && (
+              <span className="absolute right-2.5 top-2.5 h-8 w-8 rounded-full border-2 border-surface/90 bg-dark/20 backdrop-blur-sm" />
+            )
+          )}
+        </div>
+        <div className="mt-3 flex items-center gap-2">
+          <OriginBadge origin={candidate.origin} />
+          {candidate.total_time && (
+            <span className="inline-flex items-center gap-1 text-[12px] text-faint">
+              <Icon name="clock" size={13} />
+              {candidate.total_time}
             </span>
           )}
         </div>
-        <div className="mt-2.5 flex items-center gap-1.5">
-          <OriginBadge origin={candidate.origin} />
-          {candidate.total_time && (
-            <span className="text-[11px] text-fainter">{candidate.total_time}</span>
-          )}
-        </div>
-        <div className="mt-1.5 line-clamp-2 font-serif text-[15px] font-semibold leading-tight text-ink">
+        <div
+          className={`mt-1.5 line-clamp-2 font-serif text-[17px] font-medium leading-[1.2] tracking-[-0.005em] ${
+            selected ? 'text-terracotta-deep' : 'text-ink'
+          }`}
+        >
           {candidate.title}
         </div>
       </button>
@@ -361,17 +421,17 @@ function CandidateCard({
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
-          className="mt-0.5 inline-flex min-h-[44px] max-w-full items-center gap-1 text-[11.5px] text-faint hover:text-terracotta focus-visible:text-terracotta"
+          className="inline-flex min-h-[44px] max-w-full items-center gap-1 text-[12px] text-faint hover:text-terracotta-deep focus-visible:text-terracotta-deep"
         >
           <span className="truncate">{candidate.source_domain ?? 'View recipe'}</span>
-          <span aria-hidden className="flex-none">
-            ↗
-          </span>
+          <Icon name="external" size={12} className="flex-none" aria-hidden />
           <span className="sr-only">(opens source in a new tab)</span>
         </a>
       ) : (
         candidate.source_domain && (
-          <div className="mt-0.5 text-[11.5px] text-faint">{candidate.source_domain}</div>
+          <div className="flex min-h-[44px] items-center text-[12px] text-faint">
+            {candidate.source_domain}
+          </div>
         )
       )}
     </div>

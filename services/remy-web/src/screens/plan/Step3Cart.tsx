@@ -20,10 +20,13 @@ import {
   Button,
   CountStepper,
   DegradedBanner,
+  ScreenHeader,
+  SectionLabel,
   Spinner,
   StatusPill,
   StickyBar,
 } from '../../components/ui'
+import Icon from '../../components/Icon'
 import type { PillTone } from '../../components/ui'
 
 const RESOLVED = new Set(['matched', 'substituted', 'stock_unknown', 'not_found', 'failed'])
@@ -91,72 +94,142 @@ export default function Step3Cart({ snapshot, live }: { snapshot: PlanSnapshot; 
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="no-scrollbar flex-1 overflow-y-auto px-[18px] pb-8 pt-2">
-        <div className="font-serif text-[26px] font-semibold tracking-tight">Review your cart</div>
-        {matching ? (
-          <div className="mt-1 flex items-center gap-2 text-[13.5px] text-muted">
-            <Spinner /> Matching products at {storeName} — {resolvedCount} of {cart.items.length}{' '}
-            matched
-          </div>
-        ) : (
-          <div className="mt-1 text-[13.5px] text-muted">
-            Prices from {storeName}. Review before we add anything.
+      <div className="no-scrollbar flex-1 overflow-y-auto pb-8">
+        <ScreenHeader
+          className="!pt-4"
+          title="Review your cart"
+          subtitle={
+            matching ? (
+              <span className="flex items-center gap-2">
+                <Spinner /> Matching products at {storeName} — {resolvedCount} of {cart.items.length}{' '}
+                matched
+              </span>
+            ) : (
+              `Prices from ${storeName}. Review before we add anything.`
+            )
+          }
+        />
+        {matching && (
+          <div
+            className="mx-5 mt-3 h-1 overflow-hidden rounded-full bg-chip"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={cart.items.length}
+            aria-valuenow={resolvedCount}
+          >
+            <div
+              className="h-full rounded-full bg-terracotta transition-[width] duration-500"
+              style={{
+                width: `${cart.items.length ? (resolvedCount / cart.items.length) * 100 : 0}%`,
+              }}
+            />
           </div>
         )}
 
-        {cart.warnings.map((w, i) => (
-          <div key={i} className="mt-3">
-            <DegradedBanner>{w}</DegradedBanner>
-          </div>
-        ))}
-
-        <div className="mt-4 flex flex-col gap-3">
-          {items.map((item) => (
-            <CartItemCard
-              key={item.id}
-              item={item}
-              source={sourceFor(snapshot, item.line_id)}
-              live={live}
-              busy={cartEdits.isPending || retry.isPending}
-              onSetCount={(n) => applyEdit({ op: 'set_count', item_id: item.id, count: n })}
-              onSwap={(altId) =>
-                applyEdit({ op: 'swap', item_id: item.id, alternative_id: altId })
-              }
-              onDrop={() => applyEdit({ op: 'drop', item_id: item.id })}
-              onManualSearch={(term) =>
-                applyEdit({ op: 'manual_search', item_id: item.id, term })
-              }
-              onRetry={() => retryItem(item.id)}
-            />
+        <div className="px-4 sm:px-5">
+          {cart.warnings.map((w, i) => (
+            <div key={i} className="mt-3">
+              <DegradedBanner>{w}</DegradedBanner>
+            </div>
           ))}
+
+          <div className="mt-5 flex flex-col gap-3">
+            {items.map((item) => (
+              <CartItemCard
+                key={item.id}
+                item={item}
+                source={sourceFor(snapshot, item.line_id)}
+                live={live}
+                busy={cartEdits.isPending || retry.isPending}
+                onSetCount={(n) => applyEdit({ op: 'set_count', item_id: item.id, count: n })}
+                onSwap={(altId) =>
+                  applyEdit({ op: 'swap', item_id: item.id, alternative_id: altId })
+                }
+                onDrop={() => applyEdit({ op: 'drop', item_id: item.id })}
+                onManualSearch={(term) =>
+                  applyEdit({ op: 'manual_search', item_id: item.id, term })
+                }
+                onRetry={() => retryItem(item.id)}
+              />
+            ))}
+          </div>
         </div>
+
+        {live && !matching && (
+          <UsualsStrip snapshot={snapshot} onAdd={(upc) => applyEdit({ op: 'add_upc', upc })} />
+        )}
       </div>
 
-      {live && !matching && (
-        <UsualsStrip snapshot={snapshot} onAdd={(upc) => applyEdit({ op: 'add_upc', upc })} />
-      )}
-
-      <StickyBar>
-        <div className="mb-2 flex items-baseline justify-between">
-          <span className="text-[13px] text-muted">
-            Estimated total · {itemCount} {itemCount === 1 ? 'item' : 'items'}
-          </span>
-          <span className="tab-fig font-serif text-[22px] font-semibold text-ink">
-            {money(cart.estimated_total)}
-          </span>
-        </div>
-        <Button
-          className="w-full py-3.5 text-[15.5px] font-bold"
-          busy={executeCart.isPending}
-          disabled={!live || matching || itemCount === 0 || executeCart.isPending}
-          onClick={onExecute}
-        >
-          {executeCart.isPending
-            ? 'Adding to Kroger cart…'
-            : `Add ${itemCount} ${itemCount === 1 ? 'item' : 'items'} to Kroger cart`}
-        </Button>
-      </StickyBar>
+      {/* Pinned to the bottom of the app's scrolling <main> so the action
+          (and the live total) stays in reach while the list scrolls. */}
+      <div className="sticky bottom-0 z-10">
+        <StickyBar>
+          <div className="mb-2.5 flex items-baseline justify-between gap-3">
+            <span className="text-[13px] text-muted">
+              <span className="font-semibold text-ink">Estimated total</span> · {itemCount}{' '}
+              {itemCount === 1 ? 'item' : 'items'}
+            </span>
+            <span className="tab-fig font-serif text-[26px] font-medium leading-none tracking-[-0.01em] text-ink">
+              {money(cart.estimated_total)}
+            </span>
+          </div>
+          <Button
+            className="h-[54px] w-full text-[16px] font-bold"
+            busy={executeCart.isPending}
+            disabled={!live || matching || itemCount === 0 || executeCart.isPending}
+            onClick={onExecute}
+          >
+            {executeCart.isPending ? (
+              'Adding to Kroger cart…'
+            ) : (
+              <>
+                <Icon name="cart" size={19} strokeWidth={2.2} />
+                {`Add ${itemCount} ${itemCount === 1 ? 'item' : 'items'} to Kroger cart`}
+              </>
+            )}
+          </Button>
+        </StickyBar>
+      </div>
     </div>
+  )
+}
+
+// Product photo tile. Kroger product shots are JPEGs on a baked-in white
+// background, so the tile stays light in BOTH themes (surface in light, the
+// warm off-white `ink` token in dark) and the image uses multiply blending so
+// its white box melts into the tile instead of showing as a hard rectangle.
+// A dark tile would either frame a glaring white square or (with multiply)
+// muddy the product colors.
+const PRODUCT_TILE = 'border border-tile bg-producttile dark:border-transparent'
+
+function ProductThumb({
+  src,
+  size,
+  radius = 'rounded-[12px]',
+}: {
+  src: string | null | undefined
+  size: number
+  radius?: string
+}) {
+  if (!src) {
+    return (
+      <span
+        className={`flex flex-none items-center justify-center bg-chip text-faint ${radius}`}
+        style={{ width: size, height: size }}
+        role="img"
+        aria-label="No product photo"
+      >
+        <Icon name="bag" size={Math.round(size * 0.36)} strokeWidth={1.7} />
+      </span>
+    )
+  }
+  return (
+    <span
+      className={`flex flex-none items-center justify-center overflow-hidden ${PRODUCT_TILE} ${radius}`}
+      style={{ width: size, height: size }}
+    >
+      <img src={src} alt="" className="h-full w-full object-contain p-1 mix-blend-multiply" />
+    </span>
   )
 }
 
@@ -190,13 +263,16 @@ function CartItemCard({
   // --- pending / matching → skeleton --------------------------------------
   if (item.status === 'pending' || item.status === 'matching') {
     return (
-      <div className="overflow-hidden rounded-[15px] border border-line bg-surface shadow-card">
-        <div className="flex gap-3 p-3.5">
-          <div className="sk h-[66px] w-[66px] flex-none rounded-[11px]" />
+      <div className="rounded-card border border-line bg-surface p-3.5 shadow-card" aria-hidden>
+        <div className="flex gap-3.5">
+          <div className="sk h-[72px] w-[72px] flex-none rounded-[12px]" />
           <div className="flex-1">
-            <div className="sk h-3.5 w-[85%] rounded" />
-            <div className="sk mt-2 h-3 w-[40%] rounded" />
-            <div className="sk mt-3 h-5 w-20 rounded-md" />
+            <div className="flex justify-between gap-3">
+              <div className="sk h-3.5 w-[70%] rounded" />
+              <div className="sk h-3.5 w-12 rounded" />
+            </div>
+            <div className="sk mt-2 h-3 w-[35%] rounded" />
+            <div className="sk mt-3 h-5 w-20 rounded-full" />
           </div>
         </div>
       </div>
@@ -210,55 +286,57 @@ function CartItemCard({
   // --- failed → scoped retry ----------------------------------------------
   if (failed) {
     return (
-      <div className="overflow-hidden rounded-[15px] border border-line bg-surface shadow-card">
-        <div className="p-3.5">
-          <DegradedBanner tone="danger" onRetry={live ? onRetry : undefined} retrying={busy}>
-            Matching failed for "{item.search_term}"{item.error ? ` — ${item.error}` : ''}.
-          </DegradedBanner>
-        </div>
+      <div className="rounded-card border border-line bg-surface p-2 shadow-card">
+        <DegradedBanner tone="danger" onRetry={live ? onRetry : undefined} retrying={busy}>
+          Matching failed for "{item.search_term}"{item.error ? ` — ${item.error}` : ''}.
+        </DegradedBanner>
       </div>
     )
   }
 
   const pill = pillFor(item)
+  const substituted = item.status === 'substituted'
 
   return (
-    <div className="overflow-hidden rounded-[15px] border border-line bg-surface shadow-card">
+    <div
+      className={`rounded-card border bg-surface shadow-card ${
+        notFound ? 'border-danger-border' : substituted ? 'border-warn-border' : 'border-line'
+      }`}
+    >
       <div className="p-3.5">
-        <div className="flex gap-3">
-          <div className="flex h-[66px] w-[66px] flex-none items-center justify-center rounded-[11px] border border-tile bg-white">
-            {notFound ? (
-              <span className="text-2xl text-danger-dot">?</span>
-            ) : chosen?.image_url ? (
-              <img
-                src={chosen.image_url}
-                alt=""
-                className="h-full w-full rounded-[11px] object-contain p-1"
-              />
-            ) : (
-              <span className="font-mono text-[9px] text-hint">product</span>
-            )}
-          </div>
+        <div className="flex gap-3.5">
+          {notFound ? (
+            <span
+              className="flex h-[72px] w-[72px] flex-none items-center justify-center rounded-[12px] bg-danger-bg text-danger"
+              role="img"
+              aria-label="Not found"
+            >
+              <Icon name="search" size={26} strokeWidth={1.9} />
+            </span>
+          ) : (
+            <ProductThumb src={chosen?.image_url} size={72} />
+          )}
           <div className="min-w-0 flex-1">
-            <div className="flex justify-between gap-2">
-              <div className="text-[14px] font-semibold leading-snug text-ink">
+            <div className="flex justify-between gap-3">
+              <div className="text-[14.5px] font-semibold leading-snug text-ink">
                 {notFound ? item.search_term : (chosen?.description ?? item.search_term)}
               </div>
-              <div className="tab-fig whitespace-nowrap text-[14.5px] font-bold text-ink">
+              <div className="tab-fig whitespace-nowrap text-[15px] font-bold text-ink">
                 {notFound ? '—' : money(chosen?.price)}
               </div>
             </div>
-            {chosen?.size && <div className="mt-0.5 text-[12px] text-faint">{chosen.size}</div>}
+            {chosen?.size && <div className="mt-0.5 text-[12.5px] text-faint">{chosen.size}</div>}
             {source && <SourceLine source={source} />}
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               <StatusPill tone={pill.tone}>{pill.label}</StatusPill>
               {item.is_usual && (
                 <span className="inline-flex items-center gap-1 rounded-md bg-badge-favbg px-2 py-[3px] text-[11px] font-semibold text-badge-favfg">
-                  ★ Your usual
+                  <Icon name="star" size={10} filled strokeWidth={0} />
+                  Your usual
                 </span>
               )}
-              {item.status === 'substituted' && (
-                <span className="text-[11px] text-warn">wanted: {item.search_term}</span>
+              {substituted && (
+                <span className="text-[11.5px] font-medium text-warn">wanted: {item.search_term}</span>
               )}
             </div>
           </div>
@@ -266,8 +344,9 @@ function CartItemCard({
 
         {/* not_found → manual search */}
         {notFound && live && (
-          <div className="mt-3 rounded-[10px] bg-danger-bg p-3">
-            <div className="mb-2 text-[12.5px] font-semibold text-danger">
+          <div className="mt-3 rounded-[14px] bg-danger-bg p-3">
+            <div className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-danger">
+              <Icon name="alert" size={15} className="flex-none" />
               Couldn't find "{item.search_term}" at your store.
             </div>
             <div className="flex gap-2">
@@ -275,15 +354,18 @@ function CartItemCard({
                 value={manualText}
                 onChange={(e) => setManualText(e.target.value)}
                 placeholder="Search for it manually"
-                className="flex-1 rounded-[8px] border border-danger-border bg-surface px-2.5 py-2 text-[12.5px] outline-none"
+                aria-label={`Search for ${item.search_term}`}
+                className="h-11 min-w-0 flex-1 rounded-[12px] border border-danger-border bg-surface px-3 text-[14px] text-ink outline-none placeholder:text-faint focus:border-danger"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && manualText.trim()) onManualSearch(manualText.trim())
                 }}
               />
               <button
+                type="button"
                 onClick={() => manualText.trim() && onManualSearch(manualText.trim())}
-                className="rounded-[8px] bg-danger px-3 py-2 text-[12.5px] font-semibold text-white"
+                className="inline-flex h-11 flex-none items-center gap-1.5 rounded-[12px] bg-danger px-3.5 text-[13.5px] font-semibold text-onaccent"
               >
+                <Icon name="search" size={15} strokeWidth={2.4} />
                 Search
               </button>
             </div>
@@ -292,7 +374,7 @@ function CartItemCard({
 
         {/* actions row */}
         {!notFound && (
-          <div className="mt-3 flex items-center gap-2.5 border-t border-divider pt-3">
+          <div className="mt-3 flex items-center gap-2 border-t border-divider pt-3">
             <CountStepper
               count={count}
               onChange={(n) => {
@@ -304,14 +386,19 @@ function CartItemCard({
             {live && item.alternatives.length > 0 && (
               <Button
                 variant="secondary"
-                className="px-3 py-2 text-[12.5px]"
+                className={`h-10 px-3.5 text-[13px] ${
+                  swapOpen ? '!border-ink !bg-ink !text-cream' : substituted ? '!border-warn-border' : ''
+                }`}
+                aria-expanded={swapOpen}
                 onClick={() => setSwapOpen((v) => !v)}
               >
+                <Icon name="swap" size={15} strokeWidth={2.2} />
                 Swap
               </Button>
             )}
             {live && (
-              <Button variant="danger" className="px-3 py-2 text-[12.5px]" onClick={onDrop}>
+              <Button variant="danger" className="h-10 px-3.5 text-[13px]" onClick={onDrop}>
+                <Icon name="trash" size={15} strokeWidth={2.2} />
                 Remove
               </Button>
             )}
@@ -320,10 +407,8 @@ function CartItemCard({
 
         {/* swap expander */}
         {swapOpen && !notFound && (
-          <div className="mt-3 rounded-[11px] bg-cream p-2.5">
-            <div className="mb-2 pl-0.5 text-[11px] font-bold uppercase tracking-[.05em] text-faint">
-              Other matches
-            </div>
+          <div className="mt-3 rounded-[14px] border border-line bg-cream p-2.5">
+            <SectionLabel className="mb-2 pl-1 pt-0.5">Other matches</SectionLabel>
             <div className="flex flex-col gap-1.5">
               {item.alternatives.map((alt) => (
                 <AltRow
@@ -342,7 +427,8 @@ function CartItemCard({
                     value={manualText}
                     onChange={(e) => setManualText(e.target.value)}
                     placeholder="Search for something else"
-                    className="flex-1 rounded-[8px] border border-line2 bg-surface px-2.5 py-2 text-[12.5px] outline-none focus:border-terracotta"
+                    aria-label="Search for something else"
+                    className="h-11 min-w-0 flex-1 rounded-[12px] border border-line2 bg-surface px-3 text-[14px] text-ink outline-none placeholder:text-faint focus:border-terracotta"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && manualText.trim()) {
                         onManualSearch(manualText.trim())
@@ -351,7 +437,7 @@ function CartItemCard({
                     }}
                   />
                   <Button
-                    className="px-3 py-2 text-[12.5px]"
+                    className="h-11 px-3.5 text-[13.5px]"
                     disabled={!manualText.trim()}
                     onClick={() => {
                       onManualSearch(manualText.trim())
@@ -363,9 +449,11 @@ function CartItemCard({
                 </div>
               ) : (
                 <button
+                  type="button"
                   onClick={() => setManualOpen(true)}
-                  className="rounded-[10px] border border-dashed border-line2 py-2.5 text-[12.5px] font-semibold text-muted hover:text-ink"
+                  className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-[12px] border border-dashed border-line2 text-[13px] font-semibold text-muted hover:border-terracotta hover:text-terracotta-deep"
                 >
+                  <Icon name="search" size={15} />
                   Search for something else
                 </button>
               )}
@@ -381,7 +469,7 @@ function CartItemCard({
 function SourceLine({ source }: { source: ItemSource }) {
   const suffix = source.titles.length > 0 ? ` · ${source.titles.join(', ')}` : ''
   return (
-    <div className="mt-1 truncate text-[11.5px] text-hint" title={`${source.raw}${suffix}`}>
+    <div className="mt-1 truncate text-[11.5px] text-faint" title={`${source.raw}${suffix}`}>
       <span className="italic">{source.raw}</span>
       {suffix}
     </div>
@@ -391,30 +479,25 @@ function SourceLine({ source }: { source: ItemSource }) {
 function AltRow({ alt, onChoose }: { alt: Alternative; onChoose: () => void }) {
   return (
     <button
+      type="button"
       onClick={onChoose}
-      className="flex items-center gap-2.5 rounded-[10px] border border-line bg-surface p-2.5 text-left"
+      className="flex min-h-[56px] items-center gap-3 rounded-[12px] border border-line bg-surface p-2 pr-3 text-left hover:border-terracotta"
     >
-      <span className="flex h-10 w-10 flex-none items-center justify-center overflow-hidden rounded-[8px] border border-tile bg-white">
-        {alt.image_url ? (
-          <img src={alt.image_url} alt="" className="h-full w-full object-contain p-0.5" />
-        ) : (
-          <span className="font-mono text-[8px] text-hint">img</span>
-        )}
-      </span>
+      <ProductThumb src={alt.image_url} size={44} radius="rounded-[10px]" />
       <span className="min-w-0 flex-1">
-        <span className="block text-[13px] font-semibold leading-tight text-ink">
+        <span className="line-clamp-2 block text-[13.5px] font-semibold leading-tight text-ink">
           {alt.description}
         </span>
-        {alt.size && <span className="block text-[11.5px] text-faint">{alt.size}</span>}
+        {alt.size && <span className="mt-0.5 block text-[12px] text-faint">{alt.size}</span>}
       </span>
-      <span className="tab-fig text-[13.5px] font-bold">{money(alt.price)}</span>
+      <span className="tab-fig flex-none text-[14px] font-bold text-ink">{money(alt.price)}</span>
     </button>
   )
 }
 
 // "Add your usuals?" — a horizontal strip of remembered products NOT already in
 // the current cart draft (compared by UPC, including dropped items). Tapping a
-// chip appends it via the add_upc cart edit; the chip's ✕ hides it (with undo).
+// chip appends it via the add_upc cart edit; the chip's close button hides it (with undo).
 // Renders nothing when there is nothing to suggest (cold-start silence).
 function UsualsStrip({
   snapshot,
@@ -450,16 +533,17 @@ function UsualsStrip({
   }
 
   return (
-    <div className="flex-none border-t border-line bg-surface/95 px-[18px] pb-1 pt-3">
-      <div className="mb-2 text-[11px] font-bold uppercase tracking-[.05em] text-faint">
+    <section className="mt-7">
+      <SectionLabel className="mb-1 flex items-center gap-1.5 px-5">
+        <Icon name="star" size={12} filled strokeWidth={0} />
         Add your usuals?
-      </div>
-      <div className="no-scrollbar -mx-[18px] flex gap-2.5 overflow-x-auto px-[18px] pb-2">
+      </SectionLabel>
+      <div className="no-scrollbar flex gap-2.5 overflow-x-auto px-5 pb-2 pt-1.5">
         {suggestions.map((u) => (
           <UsualChip key={`${u.food_key}-${u.upc}`} usual={u} onAdd={() => onAdd(u.upc)} onHide={() => onHide(u)} />
         ))}
       </div>
-    </div>
+    </section>
   )
 }
 
@@ -473,31 +557,28 @@ function UsualChip({
   onHide: () => void
 }) {
   return (
-    <div className="relative w-[112px] flex-none">
+    <div className="relative w-[116px] flex-none">
       <button
+        type="button"
         onClick={onAdd}
-        className="flex w-full flex-col items-center gap-1.5 rounded-[13px] border border-line2 bg-cream/60 p-2.5 text-center hover:border-terracotta"
+        className="flex w-full flex-col items-center gap-1.5 rounded-[14px] border border-line bg-surface p-2.5 text-center shadow-card hover:border-terracotta"
       >
-        <span className="flex h-[52px] w-[52px] items-center justify-center overflow-hidden rounded-[10px] border border-tile bg-white">
-          {usual.image_url ? (
-            <img src={usual.image_url} alt="" className="h-full w-full object-contain p-1" />
-          ) : (
-            <span className="font-mono text-[8px] text-hint">img</span>
-          )}
-        </span>
-        <span className="line-clamp-2 text-[11.5px] font-semibold leading-tight text-ink">
+        <ProductThumb src={usual.image_url} size={52} radius="rounded-[10px]" />
+        <span className="line-clamp-2 min-h-[2.4em] text-[11.5px] font-semibold leading-tight text-ink">
           {usual.description ?? usual.food_key}
         </span>
-        <span className="tab-fig text-[11.5px] font-bold text-terracotta">
-          {usual.last_price != null ? `＋ ${money(usual.last_price)}` : '＋ Add'}
+        <span className="tab-fig inline-flex items-center gap-0.5 text-[12px] font-bold text-terracotta-deep">
+          <Icon name="plus" size={12} strokeWidth={2.8} />
+          {usual.last_price != null ? money(usual.last_price) : 'Add'}
         </span>
       </button>
       <button
+        type="button"
         aria-label={`Hide ${usual.description ?? usual.food_key}`}
         onClick={onHide}
-        className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-line2 bg-surface text-[10px] leading-none text-muted shadow-sm"
+        className="absolute -right-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-full border border-line2 bg-surface text-muted shadow-card before:absolute before:-inset-2.5 before:content-[''] hover:text-ink"
       >
-        ✕
+        <Icon name="x" size={12} strokeWidth={2.6} />
       </button>
     </div>
   )

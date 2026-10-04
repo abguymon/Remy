@@ -1,7 +1,10 @@
 /** @type {import('tailwindcss').Config} */
 // Design tokens mined verbatim from design/src/remy-app-source.html — the warm
-// hybrid palette (DESIGN_BRIEF §3). Light only, phone-first.
+// hybrid palette (DESIGN_BRIEF §3), now themed light + dark. Phone-first.
+const v = (name) => `rgb(var(--c-${name}) / <alpha-value>)`
+
 export default {
+  darkMode: 'class',
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
@@ -10,42 +13,54 @@ export default {
         serif: ["'Newsreader'", 'Georgia', 'serif'],
         mono: ['ui-monospace', 'Menlo', 'monospace'],
       },
+      // Every color is a CSS variable (RGB triplet) defined in index.css for
+      // light and dark themes, so `bg-surface/85`-style alpha still works and
+      // the whole app re-themes from one place.
       colors: {
-        canvas: '#ECE4D8', // outermost page bg
-        cream: '#F6F0E8', // screen/app bg
-        creamsoft: '#F1E7D8', // login gradient stop
-        surface: '#FFFDFA', // cards & panels
-        ink: '#2A2520', // primary text
-        muted: '#6B6156', // secondary text
-        faint: '#8A8072', // tertiary text
-        fainter: '#A79B8B',
-        hint: '#B6AB99', // labels / placeholders
-        line: '#E7DFD3', // card hairline border
-        line2: '#E1D8C9', // control border
-        divider: '#F0E9DD', // row divider
-        tile: '#EDE4D5', // product tile border
-        dark: '#17130F', // notch / token panel
+        canvas: v('canvas'), // outermost page bg
+        cream: v('cream'), // screen/app bg
+        creamsoft: v('creamsoft'), // login gradient stop
+        surface: v('surface'), // cards & panels
+        chip: v('chip'), // tag chips, segmented-control track
+        ink: v('ink'), // primary text
+        muted: v('muted'), // secondary text
+        faint: v('faint'), // tertiary text (AA on cream)
+        fainter: v('fainter'),
+        hint: v('hint'), // labels / placeholders
+        line: v('line'), // card hairline border
+        line2: v('line2'), // control border
+        divider: v('divider'), // row divider
+        tile: v('tile'), // product tile border / photo placeholder
+        producttile: v('producttile'), // stays light in dark mode: Kroger photos have baked-in white
+        dark: v('dark'), // scrims, notch
+        onaccent: v('onaccent'), // text/icons on a terracotta fill
         terracotta: {
-          DEFAULT: '#C05B3B',
-          dark: '#A84A2E',
-          deep: '#A0492C',
-          soft: '#F7E6DE',
+          DEFAULT: v('terracotta'),
+          dark: v('terracotta-dark'), // hover
+          deep: v('terracotta-deep'), // accent text/links
+          soft: v('terracotta-soft'),
         },
-        success: { DEFAULT: '#3F7A50', bg: '#E4F0E6', dot: '#4F8A5B' },
-        warn: { DEFAULT: '#916312', bg: '#F7ECD6', dot: '#C08A2B', border: '#E7D3A8', deep: '#7A5B12' },
-        danger: { DEFAULT: '#A8392B', bg: '#F6DFDB', border: '#E9C4BD', dot: '#C0392B' },
+        success: { DEFAULT: v('success'), bg: v('success-bg'), dot: v('success-dot') },
+        warn: {
+          DEFAULT: v('warn'),
+          bg: v('warn-bg'),
+          dot: v('warn-dot'),
+          border: v('warn-border'),
+          deep: v('warn-deep'),
+        },
+        danger: { DEFAULT: v('danger'), bg: v('danger-bg'), border: v('danger-border'), dot: v('danger-dot') },
         badge: {
-          savedbg: '#F7E6DE',
-          savedfg: '#A0492C',
-          favbg: '#EFEAD9',
-          favfg: '#7A6A2B',
-          webbg: '#ECE6DD',
-          webfg: '#6B6156',
+          savedbg: v('terracotta-soft'),
+          savedfg: v('terracotta-deep'),
+          favbg: v('badge-favbg'),
+          favfg: v('badge-favfg'),
+          webbg: v('chip'),
+          webfg: v('muted'),
         },
       },
       borderRadius: {
-        card: '14px',
-        panel: '16px',
+        card: '16px',
+        panel: '20px',
       },
       boxShadow: {
         card: '0 1px 3px rgba(40,30,20,.05)',

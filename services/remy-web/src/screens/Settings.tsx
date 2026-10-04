@@ -1,7 +1,10 @@
 // Settings (DESIGN_BRIEF §4.10) — edit register. Kroger account (connect/return
 // toast/disconnect), store picker (ZIP search → select), fulfillment control,
-// pantry chip editor, favorite sites list, API tokens with show-once modal.
+// pantry chip editor, favorite sites list, appearance, API tokens with
+// show-once modal, admin invitations/users, password change.
+// v2 visual language (§8): serif headings, grouped surface cards, icon-led rows.
 import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ApiError } from '../lib/api'
 import {
@@ -35,7 +38,21 @@ import type {
 } from '../lib/types'
 import { shortDate } from '../lib/format'
 import { toast } from '../stores/toast'
-import { Button, ConfirmDialog, SectionLabel, Spinner } from '../components/ui'
+import { useTheme } from '../stores/theme'
+import type { ThemePref } from '../stores/theme'
+import {
+  Button,
+  ConfirmDialog,
+  IconButton,
+  ScreenHeader,
+  SectionHeading,
+  SectionLabel,
+  SegmentedControl,
+  Spinner,
+  StatusPill,
+} from '../components/ui'
+import Icon from '../components/Icon'
+import type { IconName } from '../components/Icon'
 import UsualsSettings from './settings/UsualsSettings'
 
 const KROGER_ERRORS: Record<string, string> = {
@@ -45,6 +62,13 @@ const KROGER_ERRORS: Record<string, string> = {
   missing_code_or_state: 'Kroger returned an incomplete response. Try again.',
   access_denied: 'You declined the Kroger connection.',
 }
+
+// Shared edit-register styles.
+const inputClass =
+  'h-11 w-full min-w-0 rounded-[12px] border border-line2 bg-cream px-3.5 text-[14px] text-ink outline-none placeholder:text-faint focus:border-terracotta'
+const smallBtn = 'h-11 flex-none px-4 text-[13.5px]'
+const pillAction =
+  'inline-flex h-9 flex-none items-center gap-1.5 rounded-full border border-line2 bg-surface px-3.5 text-[13px] font-semibold hover:bg-cream disabled:cursor-not-allowed disabled:opacity-40'
 
 export default function Settings() {
   const settings = useSettings()
@@ -68,11 +92,13 @@ export default function Settings() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const subtitle = me.data ? `Signed in as ${me.data.username}` : undefined
+
   if (settings.isLoading || !settings.data) {
     return (
-      <div className="px-5 py-6">
-        <div className="font-serif text-[28px] font-semibold tracking-tight">Settings</div>
-        <div className="mt-6 flex items-center gap-2 text-sm text-muted">
+      <div className="pb-12">
+        <ScreenHeader title="Settings" subtitle={subtitle} />
+        <div className="mt-8 flex items-center gap-2 px-5 text-sm text-muted">
           <Spinner /> Loading…
         </div>
       </div>
@@ -80,13 +106,14 @@ export default function Settings() {
   }
 
   return (
-    <div className="px-5 pb-10 pt-3.5">
-      <div className="font-serif text-[28px] font-semibold tracking-tight">Settings</div>
+    <div className="pb-12">
+      <ScreenHeader title="Settings" subtitle={subtitle} />
       <KrogerSection />
       <StoreSection settings={settings.data} />
       <UsualsSettings settings={settings.data} />
       <PantrySection settings={settings.data} />
       <SitesSection settings={settings.data} />
+      <AppearanceSection />
       <TokensSection />
       {me.data?.is_admin && <InvitationsSection />}
       {me.data?.is_admin && <UsersSection currentUserId={me.data.id} />}
@@ -95,11 +122,97 @@ export default function Settings() {
   )
 }
 
-function Section({ label, children }: { label: string; children: React.ReactNode }) {
+// --- Layout primitives -------------------------------------------------------
+
+function Section({
+  title,
+  sub,
+  children,
+}: {
+  title: string
+  sub?: ReactNode
+  children: ReactNode
+}) {
   return (
-    <div className="mt-6">
-      <SectionLabel className="mb-2">{label}</SectionLabel>
+    <section className="mt-9 px-5">
+      <SectionHeading sub={sub} className="mb-3">
+        {title}
+      </SectionHeading>
       {children}
+    </section>
+  )
+}
+
+function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return (
+    <div
+      className={`divide-y divide-divider overflow-hidden rounded-card border border-line bg-surface shadow-card ${className}`}
+    >
+      {children}
+    </div>
+  )
+}
+
+// Round icon tile that leads a settings row.
+function RowIcon({ icon, tone = 'neutral' }: { icon: IconName; tone?: 'neutral' | 'accent' }) {
+  return (
+    <span
+      className={`flex h-9 w-9 flex-none items-center justify-center rounded-full ${
+        tone === 'accent' ? 'bg-terracotta-soft text-terracotta-deep' : 'bg-chip text-muted'
+      }`}
+    >
+      <Icon name={icon} size={18} />
+    </span>
+  )
+}
+
+// "＋ Create …" footer row inside a card.
+function AddRow({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex min-h-[52px] w-full items-center gap-3 px-4 text-left text-[14px] font-semibold text-terracotta-deep hover:bg-cream"
+    >
+      <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full border border-dashed border-line2">
+        <Icon name="plus" size={16} strokeWidth={2.4} />
+      </span>
+      {label}
+    </button>
+  )
+}
+
+// Inline "name + Create/Cancel" form row used by tokens, users, invitations.
+function InlineCreate({
+  placeholder,
+  value,
+  onChange,
+  onSubmit,
+  onCancel,
+  pending,
+}: {
+  placeholder: string
+  value: string
+  onChange: (v: string) => void
+  onSubmit: () => void
+  onCancel: () => void
+  pending: boolean
+}) {
+  return (
+    <div className="flex items-center gap-2 px-4 py-3">
+      <input
+        autoFocus
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && onSubmit()}
+        className={`${inputClass} flex-1`}
+      />
+      <Button className={smallBtn} onClick={onSubmit} busy={pending} busyLabel="…">
+        Create
+      </Button>
+      <Button variant="ghost" className="h-11 flex-none px-2 text-[13.5px]" onClick={onCancel}>
+        Cancel
+      </Button>
     </div>
   )
 }
@@ -123,34 +236,38 @@ function KrogerSection() {
   }
 
   return (
-    <Section label="Kroger account">
-      <div className="flex items-center justify-between gap-3 rounded-card border border-line bg-surface p-4">
-        <div>
-          <div className="text-[15px] font-semibold">Kroger</div>
-          <div
-            className={`mt-1.5 inline-flex items-center gap-1.5 rounded-md px-2 py-[3px] text-[12px] font-semibold ${
-              connected ? 'bg-success-bg text-success' : 'bg-danger-bg text-danger'
-            }`}
-          >
-            <span
-              className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-success-dot' : 'bg-danger-dot'}`}
-            />
-            {status.isLoading ? 'Checking…' : connected ? 'Connected' : 'Not connected'}
+    <Section title="Kroger account" sub="Remy fills your Kroger cart for you.">
+      <Card>
+        <div className="flex items-center gap-3 px-4 py-3.5">
+          <RowIcon icon="link" tone={connected ? 'accent' : 'neutral'} />
+          <div className="min-w-0 flex-1">
+            <div className="text-[15px] font-semibold">Kroger</div>
+            <div className="mt-1">
+              {status.isLoading ? (
+                <StatusPill tone="neutral">Checking…</StatusPill>
+              ) : connected ? (
+                <StatusPill tone="success">Connected</StatusPill>
+              ) : (
+                <StatusPill tone="danger">Not connected</StatusPill>
+              )}
+            </div>
           </div>
+          {connected ? (
+            <Button variant="danger" className="h-10 flex-none px-4 text-[13.5px]" onClick={() => setConfirm(true)}>
+              Disconnect
+            </Button>
+          ) : (
+            <Button
+              className="h-10 flex-none px-4 text-[13.5px]"
+              onClick={connect}
+              busy={auth.isPending}
+              busyLabel="Connecting…"
+            >
+              Connect
+            </Button>
+          )}
         </div>
-        {connected ? (
-          <button
-            onClick={() => setConfirm(true)}
-            className="rounded-[9px] border border-line2 bg-cream px-3.5 py-2.5 text-[13px] font-semibold text-danger"
-          >
-            Disconnect
-          </button>
-        ) : (
-          <Button className="px-4 py-2.5 text-[13px]" onClick={connect} disabled={auth.isPending}>
-            {auth.isPending ? 'Connecting…' : 'Connect'}
-          </Button>
-        )}
-      </div>
+      </Card>
 
       <ConfirmDialog
         open={confirm}
@@ -176,50 +293,53 @@ function StoreSection({ settings }: { settings: SettingsResponse }) {
   const updateSettings = useUpdateSettings()
 
   return (
-    <Section label="Store">
-      <div className="rounded-card border border-line bg-surface p-4">
+    <Section title="Store">
+      <Card>
         {settings.store_location_id && !changing ? (
-          <div className="flex items-start gap-3">
-            <div className="flex-1">
-              <div className="text-[15px] font-semibold">{settings.store_name ?? 'Selected store'}</div>
+          <div className="flex items-center gap-3 px-4 py-3.5">
+            <RowIcon icon="store" />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[15px] font-semibold">
+                {settings.store_name ?? 'Selected store'}
+              </div>
               {settings.zip_code && (
                 <div className="mt-0.5 text-[12.5px] text-faint">ZIP {settings.zip_code}</div>
               )}
             </div>
             <button
               onClick={() => setChanging(true)}
-              className="text-[12.5px] font-semibold text-terracotta"
+              className="-mr-2 min-h-[44px] flex-none px-2 text-[13.5px] font-semibold text-terracotta-deep"
             >
               Change
             </button>
           </div>
         ) : (
-          <StoreSearch
-            initialZip={settings.zip_code ?? ''}
-            hasStore={!!settings.store_location_id}
-            onCancel={() => setChanging(false)}
-            onSelected={() => setChanging(false)}
-          />
+          <div className="px-4 py-3.5">
+            <StoreSearch
+              initialZip={settings.zip_code ?? ''}
+              hasStore={!!settings.store_location_id}
+              onCancel={() => setChanging(false)}
+              onSelected={() => setChanging(false)}
+            />
+          </div>
         )}
 
         {/* Fulfillment segmented control */}
-        <div className="mt-3.5 flex gap-1.5 rounded-[10px] border border-line2 bg-cream p-1">
-          {(['PICKUP', 'DELIVERY'] as FulfillmentMethod[]).map((m) => {
-            const active = settings.fulfillment_method === m
-            return (
-              <button
-                key={m}
-                onClick={() => updateSettings.mutate({ fulfillment_method: m })}
-                className={`flex-1 rounded-[7px] py-2.5 text-[13px] font-semibold ${
-                  active ? 'bg-terracotta text-white' : 'text-muted'
-                }`}
-              >
-                {m === 'PICKUP' ? 'Pickup' : 'Delivery'}
-              </button>
-            )
-          })}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5 px-4 py-3.5">
+          <RowIcon icon="bag" />
+          <div className="min-w-[96px] flex-1 text-[14.5px] font-semibold">Fulfillment</div>
+          <SegmentedControl<FulfillmentMethod>
+            label="Fulfillment method"
+            className="w-full sm:w-[220px]"
+            value={settings.fulfillment_method}
+            onChange={(m) => updateSettings.mutate({ fulfillment_method: m })}
+            options={[
+              { value: 'PICKUP', label: 'Pickup' },
+              { value: 'DELIVERY', label: 'Delivery' },
+            ]}
+          />
         </div>
-      </div>
+      </Card>
     </Section>
   )
 }
@@ -254,33 +374,49 @@ function StoreSearch({
 
   return (
     <div>
+      <SectionLabel className="mb-2">Find a store near you</SectionLabel>
       <div className="flex gap-2">
-        <input
-          placeholder="ZIP code"
-          value={zip}
-          inputMode="numeric"
-          onChange={(e) => setZip(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && run()}
-          className="flex-1 rounded-[10px] border border-line2 bg-cream px-3 py-2.5 text-sm outline-none focus:border-terracotta"
-        />
-        <Button className="px-4 py-2.5 text-sm" onClick={run} disabled={search.isPending}>
-          {search.isPending ? 'Searching…' : 'Search'}
+        <div className="relative min-w-0 flex-1">
+          <Icon
+            name="search"
+            size={17}
+            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-faint"
+          />
+          <input
+            placeholder="ZIP code"
+            aria-label="ZIP code"
+            value={zip}
+            inputMode="numeric"
+            onChange={(e) => setZip(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && run()}
+            className={`${inputClass} pl-10`}
+          />
+        </div>
+        <Button className={smallBtn} onClick={run} busy={search.isPending} busyLabel="Searching…">
+          Search
         </Button>
         {hasStore && (
-          <Button variant="ghost" className="px-2 py-2.5 text-sm" onClick={onCancel}>
+          <Button variant="ghost" className="h-11 flex-none px-2 text-[13.5px]" onClick={onCancel}>
             Cancel
           </Button>
         )}
       </div>
 
-      {error && <div className="mt-2 text-[12.5px] text-danger">{error}</div>}
+      {error && (
+        <div className="mt-2.5 flex items-center gap-1.5 text-[12.5px] text-danger">
+          <Icon name="alert" size={14} className="flex-none" />
+          {error}
+        </div>
+      )}
 
       {search.isSuccess && results.length === 0 && (
-        <div className="mt-3 text-[13px] text-muted">No stores found near that ZIP.</div>
+        <div className="mt-3 rounded-[12px] border border-dashed border-line2 px-3.5 py-3 text-center text-[13px] text-muted">
+          No stores found near that ZIP.
+        </div>
       )}
 
       {results.length > 0 && (
-        <div className="mt-3 overflow-hidden rounded-[11px] border border-line2">
+        <div className="mt-3 divide-y divide-divider overflow-hidden rounded-[14px] border border-line2">
           {results.map((s: StoreLocation) => (
             <button
               key={s.id}
@@ -290,9 +426,10 @@ function StoreSearch({
                 toast(`Store set to ${s.name ?? 'selected store'}`)
                 onSelected()
               }}
-              className="flex w-full items-center justify-between gap-3 border-b border-divider px-3.5 py-3 text-left last:border-0 hover:bg-cream disabled:opacity-60"
+              className="flex min-h-[56px] w-full items-center justify-between gap-3 px-3.5 py-3 text-left hover:bg-cream disabled:opacity-60"
             >
-              <div className="min-w-0">
+              <Icon name="store" size={18} className="flex-none text-faint" />
+              <div className="min-w-0 flex-1">
                 <div className="truncate text-[14px] font-semibold text-ink">
                   {s.name ?? s.chain ?? 'Kroger store'}
                 </div>
@@ -305,6 +442,7 @@ function StoreSearch({
                   {s.distance.toFixed(1)} mi
                 </span>
               )}
+              <Icon name="chevronRight" size={16} className="flex-none text-faint" />
             </button>
           ))}
         </div>
@@ -339,42 +477,47 @@ function PantrySection({ settings }: { settings: SettingsResponse }) {
   }
 
   return (
-    <Section label="Pantry staples">
-      <div className="rounded-card border border-line bg-surface p-4">
-        <div className="flex flex-wrap gap-2">
+    <Section title="Pantry staples" sub="Things you always have — Remy leaves them off your list.">
+      <Card>
+        <div className="flex flex-wrap gap-2 p-4">
           {items.map((item) => (
             <span
               key={item}
-              className="inline-flex items-center gap-1.5 rounded-full border border-line2 bg-cream py-1.5 pl-3 pr-1.5 text-[13px] text-ink"
+              className="inline-flex h-9 items-center gap-1 rounded-full border border-line bg-cream pl-3.5 pr-1 text-[13.5px] font-medium text-ink"
             >
               {item}
               <button
                 aria-label={`Remove ${item}`}
                 onClick={() => persist(items.filter((i) => i !== item))}
-                className="flex h-[18px] w-[18px] items-center justify-center rounded-full bg-line2 text-[11px] leading-none text-muted"
+                className="flex h-7 w-7 items-center justify-center rounded-full text-faint hover:bg-chip hover:text-ink"
               >
-                ✕
+                <Icon name="x" size={13} strokeWidth={2.4} />
               </button>
             </span>
           ))}
-          <input
-            placeholder="Add staple…"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') add()
-            }}
-            onBlur={add}
-            className="w-[120px] rounded-full border border-dashed border-[#D8CDB9] bg-transparent px-3.5 py-1.5 text-[13px] outline-none"
-          />
+          <label className="inline-flex h-9 items-center gap-1.5 rounded-full border border-dashed border-line2 pl-3 pr-3.5 text-faint focus-within:border-terracotta">
+            <Icon name="plus" size={14} strokeWidth={2.4} className="flex-none" />
+            <input
+              placeholder="Add staple…"
+              aria-label="Add staple"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') add()
+              }}
+              onBlur={add}
+              className="w-[104px] bg-transparent text-[13.5px] text-ink outline-none placeholder:text-faint"
+            />
+          </label>
         </div>
         <button
           onClick={() => persist(defaultsRef.current)}
-          className="mt-3 text-[12.5px] font-semibold text-terracotta"
+          className="flex min-h-[48px] w-full items-center gap-2 px-4 text-left text-[13.5px] font-semibold text-terracotta-deep hover:bg-cream"
         >
+          <Icon name="refresh" size={16} />
           Reset to defaults
         </button>
-      </div>
+      </Card>
     </Section>
   )
 }
@@ -408,56 +551,89 @@ function SitesSection({ settings }: { settings: SettingsResponse }) {
     persist(next)
   }
 
+  const arrowBtn =
+    'flex h-9 w-9 items-center justify-center rounded-full text-muted hover:bg-chip hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent'
+
   return (
-    <Section label="Favorite recipe sites">
-      <div className="overflow-hidden rounded-card border border-line bg-surface">
+    <Section title="Favorite recipe sites" sub="Searched first, in this order.">
+      <Card>
         {sites.map((domain, i) => (
-          <div
-            key={domain}
-            className="flex items-center gap-2.5 border-b border-divider px-3.5 py-2.5"
-          >
-            <div className="flex flex-col">
-              <button
-                aria-label="Move up"
-                disabled={i === 0}
-                onClick={() => move(i, -1)}
-                className="text-[11px] leading-none text-hint disabled:opacity-30"
-              >
-                ▲
-              </button>
-              <button
-                aria-label="Move down"
-                disabled={i === sites.length - 1}
-                onClick={() => move(i, 1)}
-                className="text-[11px] leading-none text-hint disabled:opacity-30"
-              >
-                ▼
-              </button>
-            </div>
-            <span className="tab-fig w-4 text-[12px] text-hint">{i + 1}</span>
-            <span className="flex-1 text-[14px] text-ink">{domain}</span>
+          <div key={domain} className="flex items-center gap-2 py-1.5 pl-4 pr-2">
+            <span className="tab-fig flex h-7 w-7 flex-none items-center justify-center rounded-full bg-chip text-[12px] font-bold text-muted">
+              {i + 1}
+            </span>
+            <span className="ml-1 min-w-0 flex-1 truncate text-[14.5px] text-ink">{domain}</span>
             <button
-              aria-label={`Remove ${domain}`}
-              onClick={() => persist(sites.filter((s) => s !== domain))}
-              className="text-[15px] text-hint"
+              aria-label="Move up"
+              disabled={i === 0}
+              onClick={() => move(i, -1)}
+              className={arrowBtn}
             >
-              ✕
+              {/* No chevronUp in the icon set — rotate chevronDown. */}
+              <Icon name="chevronUp" size={17} />
             </button>
+            <button
+              aria-label="Move down"
+              disabled={i === sites.length - 1}
+              onClick={() => move(i, 1)}
+              className={arrowBtn}
+            >
+              <Icon name="chevronDown" size={17} />
+            </button>
+            <IconButton
+              icon="x"
+              variant="plain"
+              size={36}
+              iconSize={16}
+              label={`Remove ${domain}`}
+              className="text-faint"
+              onClick={() => persist(sites.filter((s) => s !== domain))}
+            />
           </div>
         ))}
-        <div className="flex items-center gap-2 px-3.5 py-2.5">
+        <div className="flex items-center gap-2 px-4 py-3">
           <input
-            placeholder="Add a site (e.g. seriouseats.com)"
+            placeholder="e.g. seriouseats.com"
+            aria-label="Add a site"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && add()}
-            className="flex-1 rounded-[9px] border border-line2 bg-cream px-3 py-2 text-[13.5px] outline-none focus:border-terracotta"
+            className={`${inputClass} flex-1`}
           />
-          <Button variant="secondary" className="px-3.5 py-2 text-[13px]" onClick={add}>
+          <Button variant="secondary" className={smallBtn} onClick={add}>
+            <Icon name="plus" size={15} strokeWidth={2.4} />
             Add
           </Button>
         </div>
-      </div>
+      </Card>
+    </Section>
+  )
+}
+
+// --- Appearance (per device) -------------------------------------------------
+
+function AppearanceSection() {
+  const { pref, setPref } = useTheme()
+  const icon = (name: IconName) => <Icon name={name} size={16} />
+  return (
+    <Section title="Appearance">
+      <Card>
+        <div className="px-4 py-3.5">
+          <SegmentedControl<ThemePref>
+            label="Theme"
+            value={pref}
+            onChange={setPref}
+            options={[
+              { value: 'system', label: <>{icon('monitor')}System</> },
+              { value: 'light', label: <>{icon('sun')}Light</> },
+              { value: 'dark', label: <>{icon('moon')}Dark</> },
+            ]}
+          />
+          <div className="mt-2.5 text-[12.5px] text-faint">
+            Saved on this device only. System follows your device's light/dark setting.
+          </div>
+        </div>
+      </Card>
     </Section>
   )
 }
@@ -476,20 +652,21 @@ function TokensSection() {
   const active = (tokens.data ?? []).filter((t) => !t.revoked_at)
 
   return (
-    <Section label="API tokens">
-      <div className="overflow-hidden rounded-card border border-line bg-surface">
+    <Section title="API tokens" sub="Connect an MCP client such as Claude Desktop.">
+      <Card>
         {active.map((t) => (
-          <div key={t.id} className="flex items-center gap-2.5 border-b border-divider px-3.5 py-3">
-            <div className="flex-1">
-              <div className="text-[14px] font-semibold">{t.name}</div>
-              <div className="text-[11.5px] text-faint">
+          <div key={t.id} className="flex items-center gap-3 px-4 py-3">
+            <RowIcon icon="key" />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[14.5px] font-semibold">{t.name}</div>
+              <div className="text-[12px] text-faint">
                 Created {shortDate(t.created_at)} ·{' '}
                 {t.last_used_at ? `Last used ${shortDate(t.last_used_at)}` : 'Never used'}
               </div>
             </div>
             <button
               onClick={() => setRevokeId(t.id)}
-              className="text-[12.5px] font-semibold text-danger"
+              className="-mr-2 min-h-[44px] flex-none px-2 text-[13px] font-semibold text-danger"
             >
               Revoke
             </button>
@@ -497,51 +674,34 @@ function TokensSection() {
         ))}
 
         {active.length === 0 && !creating && (
-          <div className="px-3.5 py-3 text-[13px] text-muted">
+          <div className="px-4 py-3.5 text-[13.5px] text-muted">
             No tokens yet. Create one to connect an MCP client.
           </div>
         )}
 
         {creating ? (
-          <div className="flex items-center gap-2 px-3.5 py-3">
-            <input
-              autoFocus
-              placeholder="Token name (e.g. Claude Desktop)"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && submitCreate()}
-              className="flex-1 rounded-[9px] border border-line2 bg-cream px-3 py-2 text-[13.5px] outline-none focus:border-terracotta"
-            />
-            <Button className="px-3.5 py-2 text-[13px]" onClick={submitCreate} disabled={create.isPending}>
-              {create.isPending ? '…' : 'Create'}
-            </Button>
-            <Button
-              variant="ghost"
-              className="px-2 py-2 text-[13px]"
-              onClick={() => {
-                setCreating(false)
-                setName('')
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
+          <InlineCreate
+            placeholder="Token name (e.g. Claude Desktop)"
+            value={name}
+            onChange={setName}
+            onSubmit={submitCreate}
+            pending={create.isPending}
+            onCancel={() => {
+              setCreating(false)
+              setName('')
+            }}
+          />
         ) : (
-          <button
-            onClick={() => setCreating(true)}
-            className="w-full px-3.5 py-3 text-left text-[13.5px] font-semibold text-terracotta"
-          >
-            ＋ Create token
-          </button>
+          <AddRow label="Create token" onClick={() => setCreating(true)} />
         )}
-      </div>
+      </Card>
 
       {created && (
         <SecretModal
           title="Token created"
           blurb={
             <>
-              Copy it now — <b>you won't be able to see it again.</b>
+              Copy it now — <b className="text-ink">you won't be able to see it again.</b>
             </>
           }
           secret={created.token}
@@ -614,68 +774,75 @@ function AccountSection() {
     }
   }
 
-  const inputClass =
-    'w-full rounded-[10px] border border-line2 bg-cream px-3 py-3 text-sm outline-none focus:border-terracotta'
-
   return (
-    <Section label="Account">
-      <div className="rounded-card border border-line bg-surface p-4">
-        <div className="text-[15px] font-semibold">Change password</div>
-        <div className="mt-3 flex flex-col gap-2.5">
-          <input
-            type="password"
-            autoComplete="current-password"
-            placeholder="Current password"
-            value={current}
-            onChange={(e) => setCurrent(e.target.value)}
-            className={inputClass}
-          />
-          <input
-            type="password"
-            autoComplete="new-password"
-            placeholder="New password (min 12 characters)"
-            value={next}
-            onChange={(e) => setNext(e.target.value)}
-            className={inputClass}
-          />
-          <input
-            type="password"
-            autoComplete="new-password"
-            placeholder="Confirm new password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && canSubmit && submit()}
-            className={inputClass}
-          />
-        </div>
-
-        {tooShort && (
-          <div className="mt-2 text-[12.5px] text-muted">
-            New password must be at least 12 characters.
+    <Section title="Account">
+      <Card>
+        <div className="p-4">
+          <div className="flex items-center gap-3">
+            <RowIcon icon="user" />
+            <div className="text-[15px] font-semibold">Change password</div>
           </div>
-        )}
-        {mismatch && <div className="mt-2 text-[12.5px] text-danger">Passwords don't match.</div>}
-        {error && <div className="mt-2 text-[12.5px] text-danger">{error}</div>}
+          <div className="mt-3.5 flex flex-col gap-2.5">
+            <input
+              type="password"
+              autoComplete="current-password"
+              placeholder="Current password"
+              aria-label="Current password"
+              value={current}
+              onChange={(e) => setCurrent(e.target.value)}
+              className={inputClass}
+            />
+            <input
+              type="password"
+              autoComplete="new-password"
+              placeholder="New password (min 12 characters)"
+              aria-label="New password"
+              value={next}
+              onChange={(e) => setNext(e.target.value)}
+              className={inputClass}
+            />
+            <input
+              type="password"
+              autoComplete="new-password"
+              placeholder="Confirm new password"
+              aria-label="Confirm new password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && canSubmit && submit()}
+              className={inputClass}
+            />
+          </div>
 
-        <Button
-          className="mt-3.5 w-full py-3"
-          onClick={submit}
-          disabled={!canSubmit || changePassword.isPending}
-        >
-          {changePassword.isPending ? 'Updating…' : 'Update password'}
-        </Button>
-      </div>
+          {tooShort && (
+            <div className="mt-2 text-[12.5px] text-muted">
+              New password must be at least 12 characters.
+            </div>
+          )}
+          {mismatch && <div className="mt-2 text-[12.5px] text-danger">Passwords don't match.</div>}
+          {error && <div className="mt-2 text-[12.5px] text-danger">{error}</div>}
+
+          <Button
+            className="mt-3.5 h-12 w-full text-[14.5px]"
+            onClick={submit}
+            disabled={!canSubmit}
+            busy={changePassword.isPending}
+            busyLabel="Updating…"
+          >
+            Update password
+          </Button>
+        </div>
+      </Card>
     </Section>
   )
 }
 
 // --- Users (admin only) ----------------------------------------------------
 
-function Badge({ children, tone = 'neutral' }: { children: React.ReactNode; tone?: 'neutral' | 'danger' }) {
+function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'danger' }) {
   return (
     <span
-      className={`flex-none rounded-md px-1.5 py-[2px] text-[10.5px] font-semibold ${
-        tone === 'danger' ? 'bg-danger-bg text-danger' : 'border border-line2 bg-cream text-muted'
+      className={`flex-none rounded-full px-2 py-[2px] text-[11px] font-semibold ${
+        tone === 'danger' ? 'bg-danger-bg text-danger' : 'bg-chip text-muted'
       }`}
     >
       {children}
@@ -683,7 +850,7 @@ function Badge({ children, tone = 'neutral' }: { children: React.ReactNode; tone
   )
 }
 
-type Reveal = { title: string; blurb: React.ReactNode; secret: string }
+type Reveal = { title: string; blurb: ReactNode; secret: string }
 
 function UsersSection({ currentUserId }: { currentUserId: string }) {
   const users = useAdminUsers(true)
@@ -706,8 +873,9 @@ function UsersSection({ currentUserId }: { currentUserId: string }) {
         title: 'User created',
         blurb: (
           <>
-            Temporary password for <b>{created.username}</b>. Share it securely — they should change
-            it after signing in, and <b>you won't see it again.</b>
+            Temporary password for <b className="text-ink">{created.username}</b>. Share it
+            securely — they should change it after signing in, and{' '}
+            <b className="text-ink">you won't see it again.</b>
           </>
         ),
         secret: created.temp_password,
@@ -726,7 +894,8 @@ function UsersSection({ currentUserId }: { currentUserId: string }) {
         title: 'Password reset',
         blurb: (
           <>
-            New temporary password for <b>{u.username}</b> — <b>you won't see it again.</b>
+            New temporary password for <b className="text-ink">{u.username}</b> —{' '}
+            <b className="text-ink">you won't see it again.</b>
           </>
         ),
         secret: res.temp_password,
@@ -736,42 +905,40 @@ function UsersSection({ currentUserId }: { currentUserId: string }) {
     }
   }
 
-  const actionClass =
-    'rounded-[9px] border border-line2 bg-cream px-3 py-2.5 text-[12.5px] font-semibold'
-
   return (
-    <Section label="Users">
-      <div className="overflow-hidden rounded-card border border-line bg-surface">
+    <Section title="Users" sub="Admin only. Green dot = Kroger connected.">
+      <Card>
         {rows.map((u) => {
           const isSelf = u.id === currentUserId
           return (
-            <div key={u.id} className="border-b border-divider px-3.5 py-3 last:border-0">
-              <div className="flex items-center gap-2.5">
-                <span
-                  className={`h-2 w-2 flex-none rounded-full ${
-                    u.kroger_connected ? 'bg-success-dot' : 'bg-line2'
-                  }`}
-                  title={u.kroger_connected ? 'Kroger connected' : 'Kroger not connected'}
-                />
+            <div key={u.id} className="px-4 py-3">
+              <div className="flex items-center gap-3">
+                <span className="relative flex-none">
+                  <RowIcon icon="user" />
+                  <span
+                    className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-surface ${
+                      u.kroger_connected ? 'bg-success-dot' : 'bg-line2'
+                    }`}
+                    title={u.kroger_connected ? 'Kroger connected' : 'Kroger not connected'}
+                  />
+                </span>
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-                  <span className="truncate text-[14px] font-semibold text-ink">{u.username}</span>
+                  <span className="truncate text-[14.5px] font-semibold text-ink">{u.username}</span>
                   {u.is_admin && <Badge>Admin</Badge>}
                   {isSelf && <Badge>You</Badge>}
                   {!u.is_active && <Badge tone="danger">Inactive</Badge>}
                 </div>
               </div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <button
-                  onClick={() => resetPassword(u)}
-                  className={`${actionClass} text-muted hover:text-ink`}
-                >
+              <div className="mt-2.5 flex flex-wrap gap-2 pl-12">
+                <button onClick={() => resetPassword(u)} className={`${pillAction} text-ink`}>
+                  <Icon name="refresh" size={14} />
                   Reset password
                 </button>
                 {u.is_active ? (
                   <button
                     disabled={isSelf}
                     onClick={() => setConfirm({ user: u, activate: false })}
-                    className={`${actionClass} text-danger disabled:opacity-40`}
+                    className={`${pillAction} text-danger`}
                     title={isSelf ? "You can't deactivate your own account" : undefined}
                   >
                     Deactivate
@@ -779,7 +946,7 @@ function UsersSection({ currentUserId }: { currentUserId: string }) {
                 ) : (
                   <button
                     onClick={() => setConfirm({ user: u, activate: true })}
-                    className={`${actionClass} text-terracotta`}
+                    className={`${pillAction} text-terracotta-deep`}
                   >
                     Activate
                   </button>
@@ -790,44 +957,27 @@ function UsersSection({ currentUserId }: { currentUserId: string }) {
         })}
 
         {rows.length === 0 && !adding && (
-          <div className="px-3.5 py-3 text-[13px] text-muted">
+          <div className="px-4 py-3.5 text-[13.5px] text-muted">
             {users.isLoading ? 'Loading…' : 'No users yet.'}
           </div>
         )}
 
         {adding ? (
-          <div className="flex items-center gap-2 px-3.5 py-3">
-            <input
-              autoFocus
-              placeholder="Username"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && submitCreate()}
-              className="flex-1 rounded-[9px] border border-line2 bg-cream px-3 py-2 text-[13.5px] outline-none focus:border-terracotta"
-            />
-            <Button className="px-3.5 py-2 text-[13px]" onClick={submitCreate} disabled={create.isPending}>
-              {create.isPending ? '…' : 'Create'}
-            </Button>
-            <Button
-              variant="ghost"
-              className="px-2 py-2 text-[13px]"
-              onClick={() => {
-                setAdding(false)
-                setName('')
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
+          <InlineCreate
+            placeholder="Username"
+            value={name}
+            onChange={setName}
+            onSubmit={submitCreate}
+            pending={create.isPending}
+            onCancel={() => {
+              setAdding(false)
+              setName('')
+            }}
+          />
         ) : (
-          <button
-            onClick={() => setAdding(true)}
-            className="w-full px-3.5 py-3 text-left text-[13.5px] font-semibold text-terracotta"
-          >
-            ＋ Add user
-          </button>
+          <AddRow label="Add user" onClick={() => setAdding(true)} />
         )}
-      </div>
+      </Card>
 
       {reveal && (
         <SecretModal
@@ -876,7 +1026,7 @@ function SecretModal({
   onClose,
 }: {
   title: string
-  blurb: React.ReactNode
+  blurb: ReactNode
   secret: string
   copyLabel?: string
   onClose: () => void
@@ -896,24 +1046,36 @@ function SecretModal({
 
   return (
     <div
-      className="fixed inset-0 z-30 flex animate-pop items-center justify-center p-6"
-      style={{ background: 'rgba(40,30,20,.4)' }}
+      className="fixed inset-0 z-30 flex animate-pop items-center justify-center bg-dark/50 p-6"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-[360px] rounded-[18px] bg-surface p-[22px] shadow-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="w-full max-w-[380px] rounded-panel bg-surface p-6 shadow-modal"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="font-serif text-xl font-semibold">{title}</div>
-        <div className="mt-1.5 text-[13px] leading-relaxed text-muted">{blurb}</div>
-        <div className="my-3.5 break-all rounded-[10px] bg-dark px-3.5 py-3 font-mono text-[12.5px] text-[#E4B8A6]">
-          {secret}
+        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-warn-bg text-warn">
+          <Icon name="key" size={20} />
         </div>
-        <div className="flex gap-2.5">
-          <Button variant="secondary" className="flex-1 py-3 text-sm" onClick={copy}>
-            {copied ? 'Copied ✓' : 'Copy'}
+        <div className="mt-3 font-serif text-[22px] font-medium tracking-[-0.01em]">{title}</div>
+        <div className="mt-1.5 text-[13.5px] leading-relaxed text-muted">{blurb}</div>
+        <div className="mt-4 rounded-[14px] border border-warn-border bg-warn-bg/60 p-3">
+          <SectionLabel tone="warn" className="mb-2 flex items-center gap-1.5">
+            <Icon name="alert" size={13} strokeWidth={2.4} />
+            Shown once
+          </SectionLabel>
+          <div className="select-all break-all rounded-[10px] border border-line bg-surface px-3.5 py-3 font-mono text-[13px] leading-relaxed text-ink">
+            {secret}
+          </div>
+        </div>
+        <div className="mt-4 flex gap-2.5">
+          <Button variant="secondary" className="h-12 flex-1 text-sm" onClick={copy}>
+            <Icon name={copied ? 'check' : 'copy'} size={16} strokeWidth={copied ? 2.6 : 2} />
+            {copied ? 'Copied' : 'Copy'}
           </Button>
-          <Button className="flex-1 py-3 text-sm" onClick={onClose}>
+          <Button className="h-12 flex-1 text-sm" onClick={onClose}>
             Done
           </Button>
         </div>
@@ -931,7 +1093,9 @@ function InvitationsSection() {
   const [label, setLabel] = useState('')
   const [creating, setCreating] = useState(false)
   const [created, setCreated] = useState<InvitationCreated | null>(null)
-  const active = (invitations.data ?? []).filter((invite) => !invite.redeemed_at && !invite.revoked_at && new Date(invite.expires_at) > new Date())
+  const active = (invitations.data ?? []).filter(
+    (invite) => !invite.redeemed_at && !invite.revoked_at && new Date(invite.expires_at) > new Date(),
+  )
   const inviteUrl = created ? window.location.origin + '/join#invite=' + created.invitation_token : ''
 
   async function submit() {
@@ -946,26 +1110,57 @@ function InvitationsSection() {
   }
 
   return (
-    <Section label="Invitations">
-      <div className="overflow-hidden rounded-card border border-line bg-surface">
-        <div className="px-3.5 py-3 text-[13px] text-muted">Invite someone with a one-time link. They choose their own password; links expire after 7 days.</div>
+    <Section
+      title="Invitations"
+      sub="Invite someone with a one-time link. They choose their own password; links expire after 7 days."
+    >
+      <Card>
         {active.map((invite) => (
-          <div key={invite.id} className="flex items-center gap-3 border-t border-divider px-3.5 py-3">
-            <div className="min-w-0 flex-1"><div className="truncate text-[14px] font-semibold">{invite.recipient_label || 'Unlabeled invitation'}</div><div className="text-[11.5px] text-faint">Expires {shortDate(invite.expires_at)}</div></div>
-            <button onClick={async () => { await revoke.mutateAsync(invite.id); toast('Invitation revoked') }} className="text-[12.5px] font-semibold text-danger">Revoke</button>
+          <div key={invite.id} className="flex items-center gap-3 px-4 py-3">
+            <RowIcon icon="link" />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[14.5px] font-semibold">
+                {invite.recipient_label || 'Unlabeled invitation'}
+              </div>
+              <div className="text-[12px] text-faint">Expires {shortDate(invite.expires_at)}</div>
+            </div>
+            <button
+              onClick={async () => {
+                await revoke.mutateAsync(invite.id)
+                toast('Invitation revoked')
+              }}
+              className="-mr-2 min-h-[44px] flex-none px-2 text-[13px] font-semibold text-danger"
+            >
+              Revoke
+            </button>
           </div>
         ))}
         {creating ? (
-          <div className="flex items-center gap-2 border-t border-divider px-3.5 py-3">
-            <input autoFocus placeholder="Name (optional)" value={label} onChange={(e) => setLabel(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} className="flex-1 rounded-[9px] border border-line2 bg-cream px-3 py-2 text-[13.5px] outline-none focus:border-terracotta" />
-            <Button className="px-3.5 py-2 text-[13px]" onClick={submit} disabled={create.isPending}>{create.isPending ? '…' : 'Create'}</Button>
-            <Button variant="ghost" className="px-2 py-2 text-[13px]" onClick={() => setCreating(false)}>Cancel</Button>
-          </div>
+          <InlineCreate
+            placeholder="Name (optional)"
+            value={label}
+            onChange={setLabel}
+            onSubmit={submit}
+            pending={create.isPending}
+            onCancel={() => setCreating(false)}
+          />
         ) : (
-          <button onClick={() => setCreating(true)} className="w-full border-t border-divider px-3.5 py-3 text-left text-[13.5px] font-semibold text-terracotta">＋ Create invitation</button>
+          <AddRow label="Create invitation" onClick={() => setCreating(true)} />
         )}
-      </div>
-      {created && <SecretModal title="Invitation created" blurb={<>Copy this link now — <b>you won't be able to see it again.</b></>} secret={inviteUrl} copyLabel="invite link" onClose={() => setCreated(null)} />}
+      </Card>
+      {created && (
+        <SecretModal
+          title="Invitation created"
+          blurb={
+            <>
+              Copy this link now — <b className="text-ink">you won't be able to see it again.</b>
+            </>
+          }
+          secret={inviteUrl}
+          copyLabel="invite link"
+          onClose={() => setCreated(null)}
+        />
+      )}
     </Section>
   )
 }

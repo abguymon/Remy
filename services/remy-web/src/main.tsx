@@ -4,6 +4,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { queryClient } from './lib/queries'
+import './stores/theme'
 import './index.css'
 
 // Dev-only handle for debugging/inspecting the query cache from the console.

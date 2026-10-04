@@ -4,16 +4,18 @@ import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { fetchBlobUrl } from '../lib/api'
 import { useToast } from '../stores/toast'
+import Icon from './Icon'
+import type { IconName } from './Icon'
 
 // --- Button ----------------------------------------------------------------
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
 
 const buttonBase =
-  'inline-flex items-center justify-center gap-2 font-semibold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer'
+  'inline-flex items-center justify-center gap-2 font-semibold rounded-[14px] transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer'
 
 const buttonVariants: Record<ButtonVariant, string> = {
-  primary: 'bg-terracotta text-white shadow-terracotta hover:bg-terracotta-dark',
+  primary: 'bg-terracotta text-onaccent shadow-terracotta hover:bg-terracotta-dark',
   secondary: 'bg-surface border border-line2 text-ink hover:bg-cream',
   ghost: 'bg-transparent text-muted hover:text-ink',
   danger: 'bg-transparent border border-danger-border text-danger hover:bg-danger-bg',
@@ -36,7 +38,7 @@ export function Button({
 } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   const spinnerClass =
     variant === 'primary'
-      ? '!border-white/40 !border-t-white'
+      ? '!border-onaccent/40 !border-t-onaccent'
       : variant === 'danger'
         ? '!border-danger-border !border-t-danger'
         : ''
@@ -67,6 +69,8 @@ export function Spinner({ className = '' }: { className?: string }) {
 }
 
 // --- Step indicator (5 steps, tappable-back) -------------------------------
+// A segmented progress bar (cook-mode style) with labels; each segment is a
+// ≥44px-tall button so reachable steps stay tappable.
 
 const STEPS = ['Plan', 'Pick', 'List', 'Cart', 'Done']
 
@@ -80,41 +84,36 @@ export function StepIndicator({
   onStep: (n: number) => void
 }) {
   return (
-    <div className="flex items-center px-5 pt-3.5 pb-3">
+    <nav aria-label="Plan steps" className="grid grid-cols-5 gap-1.5 px-5 pt-2">
       {STEPS.map((label, i) => {
         const done = i < current
         const active = i === current
         const canGo = i <= reachable
-        const circle =
-          done || active
-            ? 'bg-terracotta text-white'
-            : canGo
-              ? 'bg-terracotta-soft text-terracotta-deep'
-              : 'bg-line2 text-muted'
         return (
-          <div key={label} className="flex flex-1 items-center last:flex-none">
-            <button
-              onClick={() => canGo && onStep(i)}
-              disabled={!canGo}
-              className="flex flex-1 flex-col items-center gap-1.5 disabled:cursor-default"
-              aria-current={active ? 'step' : undefined}
+          <button
+            key={label}
+            onClick={() => canGo && onStep(i)}
+            disabled={!canGo}
+            className="flex min-h-[44px] flex-col justify-center gap-1.5 text-left disabled:cursor-default"
+            aria-current={active ? 'step' : undefined}
+          >
+            <span
+              className={`h-1 rounded-full ${
+                done || active ? 'bg-terracotta' : canGo ? 'bg-terracotta/40' : 'bg-line2'
+              }`}
+            />
+            <span
+              className={`flex items-center gap-1 text-[11.5px] font-semibold ${
+                active ? 'text-terracotta-deep' : done ? 'text-ink' : 'text-faint'
+              }`}
             >
-              <span
-                className={`flex h-[26px] w-[26px] items-center justify-center rounded-full text-xs font-bold ${circle}`}
-              >
-                {done ? '✓' : i + 1}
-              </span>
-              <span
-                className={`text-[9.5px] font-semibold ${active || done ? 'text-ink' : 'text-muted'}`}
-              >
-                {label}
-              </span>
-            </button>
-            {i < STEPS.length - 1 && <span className="h-0.5 w-2 flex-none bg-line2" />}
-          </div>
+              {done && <Icon name="check" size={12} strokeWidth={3} />}
+              {label}
+            </span>
+          </button>
         )
       })}
-    </div>
+    </nav>
   )
 }
 
@@ -146,11 +145,14 @@ export function StatusPill({ tone, children }: { tone: PillTone; children: React
 export function OriginBadge({ origin }: { origin: 'saved' | 'favorite' | 'web' }) {
   const meta = {
     saved: { text: 'Saved', cls: 'bg-badge-savedbg text-badge-savedfg' },
-    favorite: { text: '★ Favorite site', cls: 'bg-badge-favbg text-badge-favfg' },
+    favorite: { text: 'Favorite site', cls: 'bg-badge-favbg text-badge-favfg' },
     web: { text: 'Web', cls: 'bg-badge-webbg text-badge-webfg' },
   }[origin]
   return (
-    <span className={`rounded-md px-[7px] py-0.5 text-[10px] font-bold ${meta.cls}`}>
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-bold ${meta.cls}`}
+    >
+      {origin === 'favorite' && <Icon name="star" size={10} filled strokeWidth={0} />}
       {meta.text}
     </span>
   )
@@ -181,10 +183,12 @@ export function PhotoFallback({
     )
   }
   return (
-    <div className={`photo-fallback flex h-full w-full items-end p-2.5 ${className}`}>
-      <span className="rounded bg-surface/70 px-1.5 py-0.5 font-mono text-[10px] text-[#A0937E]">
-        {label}
-      </span>
+    <div
+      className={`photo-fallback flex h-full w-full items-center justify-center text-faint ${className}`}
+      role="img"
+      aria-label={label}
+    >
+      <Icon name="utensils" size={28} strokeWidth={1.6} />
     </div>
   )
 }
@@ -245,7 +249,7 @@ export function AuthedImage({
 
 export function StickyBar({ children }: { children: ReactNode }) {
   return (
-    <div className="flex-none border-t border-line bg-surface/95 px-5 pb-3.5 pt-3 backdrop-blur">
+    <div className="flex-none border-t border-line bg-surface/95 px-5 pb-4 pt-3 backdrop-blur">
       {children}
     </div>
   )
@@ -281,16 +285,18 @@ export function DegradedBanner({
       ? 'bg-danger-bg border-danger-border text-danger'
       : 'bg-warn-bg border-warn-border text-warn'
   const btn = tone === 'danger' ? 'bg-danger' : 'bg-warn'
+  const icon = tone === 'danger' ? 'alert' : 'info'
   return (
     <div
-      className={`flex items-center justify-between gap-2 rounded-[10px] border px-3 py-2.5 text-[12.5px] ${styles}`}
+      className={`flex items-center justify-between gap-2.5 rounded-[14px] border px-3.5 py-3 text-[13px] ${styles}`}
     >
-      <span>{children}</span>
+      <Icon name={icon} size={17} className="flex-none" />
+      <span className="flex-1">{children}</span>
       {onRetry && (
         <button
           onClick={onRetry}
           disabled={retrying}
-          className={`flex-none rounded-md px-2.5 py-1 text-[11.5px] font-semibold text-white disabled:opacity-60 ${btn}`}
+          className={`flex-none rounded-[10px] px-3 py-1.5 text-[12.5px] font-semibold text-cream disabled:opacity-60 ${btn}`}
         >
           {retrying ? 'Retrying…' : 'Retry'}
         </button>
@@ -302,18 +308,20 @@ export function DegradedBanner({
 // --- Empty state block -----------------------------------------------------
 
 export function EmptyState({
-  glyph = '🍽',
+  icon = 'utensils',
   message,
   action,
 }: {
-  glyph?: string
+  icon?: IconName
   message: string
   action?: ReactNode
 }) {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-panel border border-dashed border-line2 bg-surface/50 px-6 py-8 text-center">
-      <div className="text-2xl">{glyph}</div>
-      <div className="text-[13.5px] text-muted">{message}</div>
+    <div className="flex flex-col items-center gap-2.5 rounded-panel border border-dashed border-line2 bg-surface/50 px-6 py-9 text-center">
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-chip text-muted">
+        <Icon name={icon} size={22} strokeWidth={1.8} />
+      </div>
+      <div className="text-[14px] text-muted">{message}</div>
       {action}
     </div>
   )
@@ -343,15 +351,14 @@ export function ConfirmDialog({
   if (!open) return null
   return (
     <div
-      className="fixed inset-0 z-30 flex animate-pop items-center justify-center p-6"
-      style={{ background: 'rgba(40,30,20,.4)' }}
+      className="fixed inset-0 z-30 flex animate-pop items-center justify-center bg-dark/50 p-6"
       onClick={onCancel}
     >
       <div
-        className="w-full max-w-[340px] rounded-[18px] bg-surface p-[22px] shadow-modal"
+        className="w-full max-w-[340px] rounded-panel bg-surface p-6 shadow-modal"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="font-serif text-xl font-semibold">{title}</div>
+        <div className="font-serif text-[22px] font-medium tracking-tight">{title}</div>
         {body && <div className="mt-1.5 text-[13px] leading-relaxed text-muted">{body}</div>}
         <div className="mt-4 flex gap-2.5">
           <Button variant="secondary" className="flex-1 py-3 text-sm" onClick={onCancel}>
@@ -377,7 +384,7 @@ export function ToastHost() {
   if (!message) return null
   return (
     <div
-      className="absolute bottom-24 left-1/2 z-20 flex -translate-x-1/2 animate-pop items-center gap-3 whitespace-nowrap rounded-xl bg-ink px-4 py-2.5 text-[13px] font-medium text-cream shadow-toast"
+      className="absolute bottom-24 left-1/2 z-20 flex -translate-x-1/2 animate-pop items-center gap-3 whitespace-nowrap rounded-[14px] bg-ink px-4 py-3 text-[13.5px] font-medium text-cream shadow-toast"
       role="status"
     >
       <span className="cursor-pointer" onClick={dismiss}>
@@ -389,7 +396,7 @@ export function ToastHost() {
             action.run()
             dismiss()
           }}
-          className="flex-none font-bold text-[#E4B8A6]"
+          className="flex-none font-bold text-terracotta-soft"
         >
           {action.label}
         </button>
@@ -410,7 +417,7 @@ export function SectionLabel({
   className?: string
 }) {
   const colors = {
-    hint: 'text-hint',
+    hint: 'text-faint',
     success: 'text-success',
     warn: 'text-warn',
     danger: 'text-danger',
@@ -418,7 +425,7 @@ export function SectionLabel({
   }
   return (
     <div
-      className={`text-xs font-bold uppercase tracking-[.06em] ${colors[tone]} ${className}`}
+      className={`text-[11.5px] font-bold uppercase tracking-[.07em] ${colors[tone]} ${className}`}
     >
       {children}
     </div>
@@ -437,22 +444,22 @@ export function CountStepper({
   min?: number
 }) {
   return (
-    <div className="flex items-center overflow-hidden rounded-[9px] border border-line2">
+    <div className="flex items-center overflow-hidden rounded-[12px] border border-line2 bg-cream">
       <button
         onClick={() => onChange(Math.max(min, count - 1))}
         disabled={count <= min}
-        className="h-9 w-9 bg-cream text-lg text-muted disabled:opacity-40"
+        className="flex h-10 w-10 items-center justify-center text-muted disabled:opacity-40"
         aria-label="Decrease quantity"
       >
-        −
+        <Icon name="minus" size={16} strokeWidth={2.4} />
       </button>
       <span className="tab-fig w-[30px] text-center text-sm font-semibold">{count}</span>
       <button
         onClick={() => onChange(count + 1)}
-        className="h-9 w-9 bg-cream text-lg text-muted"
+        className="flex h-10 w-10 items-center justify-center text-muted"
         aria-label="Increase quantity"
       >
-        +
+        <Icon name="plus" size={16} strokeWidth={2.4} />
       </button>
     </div>
   )
@@ -469,4 +476,156 @@ export function useDebounced<T extends (...args: never[]) => void>(fn: T, delay 
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => fnRef.current(...args), delay)
   }) as T
+}
+
+// --- v2 style primitives -----------------------------------------------------
+// The redesign's shared vocabulary: big serif screen titles, serif section
+// headings, pill chips, round 44px icon buttons, segmented controls.
+
+export function ScreenHeader({
+  title,
+  subtitle,
+  action,
+  className = '',
+}: {
+  title: ReactNode
+  subtitle?: ReactNode
+  action?: ReactNode
+  className?: string
+}) {
+  return (
+    <header className={`flex items-start justify-between gap-3 px-5 pt-7 ${className}`}>
+      <div className="min-w-0">
+        <h1 className="font-serif text-[34px] font-medium leading-[1.05] tracking-[-0.02em]">{title}</h1>
+        {subtitle && <div className="mt-1.5 text-[13.5px] text-muted">{subtitle}</div>}
+      </div>
+      {action && <div className="flex-none">{action}</div>}
+    </header>
+  )
+}
+
+export function SectionHeading({
+  children,
+  sub,
+  action,
+  id,
+  className = '',
+}: {
+  children: ReactNode
+  sub?: ReactNode
+  action?: ReactNode
+  id?: string
+  className?: string
+}) {
+  return (
+    <div className={`flex items-end justify-between gap-3 ${className}`}>
+      <div className="min-w-0">
+        <h2 id={id} className="font-serif text-[22px] font-medium tracking-[-0.01em]">
+          {children}
+        </h2>
+        {sub && <div className="mt-0.5 text-[13px] text-muted">{sub}</div>}
+      </div>
+      {action && <div className="flex-none text-[13.5px] font-semibold text-terracotta-deep">{action}</div>}
+    </div>
+  )
+}
+
+export function Chip({
+  children,
+  active = false,
+  onClick,
+  icon,
+  className = '',
+}: {
+  children: ReactNode
+  active?: boolean
+  onClick?: () => void
+  icon?: IconName
+  className?: string
+}) {
+  const cls = `inline-flex h-9 flex-none items-center gap-1.5 rounded-full border px-3.5 text-[13.5px] font-semibold ${
+    active ? 'border-ink bg-ink text-cream' : 'border-line bg-surface text-ink'
+  } ${className}`
+  const inner = (
+    <>
+      {icon && <Icon name={icon} size={14} filled={icon === 'heart' || icon === 'star'} strokeWidth={icon === 'heart' || icon === 'star' ? 0 : 2} />}
+      {children}
+    </>
+  )
+  if (!onClick) return <span className={cls}>{inner}</span>
+  return (
+    <button type="button" onClick={onClick} aria-pressed={active} className={cls}>
+      {inner}
+    </button>
+  )
+}
+
+export function IconButton({
+  icon,
+  label,
+  variant = 'surface',
+  size = 44,
+  iconSize = 20,
+  className = '',
+  ...rest
+}: {
+  icon: IconName
+  label: string
+  variant?: 'surface' | 'glass' | 'accent' | 'plain'
+  size?: number
+  iconSize?: number
+  className?: string
+} & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'children'>) {
+  const variants = {
+    surface: 'border border-line bg-surface text-ink hover:bg-cream',
+    glass: 'bg-surface/85 text-ink backdrop-blur',
+    accent: 'bg-terracotta text-onaccent shadow-terracotta hover:bg-terracotta-dark',
+    plain: 'text-ink hover:bg-chip',
+  }
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      className={`inline-flex flex-none items-center justify-center rounded-full disabled:opacity-40 ${variants[variant]} ${className}`}
+      style={{ width: size, height: size }}
+      {...rest}
+    >
+      <Icon name={icon} size={iconSize} strokeWidth={2.2} />
+    </button>
+  )
+}
+
+export function SegmentedControl<T extends string>({
+  value,
+  options,
+  onChange,
+  label,
+  className = '',
+}: {
+  value: T
+  options: { value: T; label: ReactNode }[]
+  onChange: (v: T) => void
+  label: string
+  className?: string
+}) {
+  return (
+    <div role="group" aria-label={label} className={`flex rounded-[12px] bg-chip p-[3px] ${className}`}>
+      {options.map((o) => {
+        const on = o.value === value
+        return (
+          <button
+            key={o.value}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onChange(o.value)}
+            className={`flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[9px] px-3 text-[13px] font-semibold ${
+              on ? 'bg-surface text-ink shadow-card' : 'text-muted hover:text-ink'
+            }`}
+          >
+            {o.label}
+          </button>
+        )
+      })}
+    </div>
+  )
 }

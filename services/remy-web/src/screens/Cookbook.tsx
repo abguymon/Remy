@@ -1,87 +1,257 @@
-// Cookbook (DESIGN_BRIEF §4.7) — browse register. Search + 2-col photo card
-// grid; "Add recipe" opens a paste-URL sheet with parse progress and a parsed
-// preview. Empty first-run and no-results states included.
-import { useEffect, useRef, useState } from 'react'
+// Cookbook (DESIGN_BRIEF §4.7, visual language v2 §8) — browse register.
+// Serif title + round add button, search, then client-derived shelves
+// ("Cook again", "Recently added", "On the table in 30 minutes") above the full
+// photo grid. Shelves hide while searching. "Add a recipe" opens a sheet that
+// imports from a URL or photos/PDF with parse progress and a parsed preview.
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ApiError } from '../lib/api'
-import { cookedLabel } from '../lib/format'
+import { pluralize, shortDate } from '../lib/format'
 import { useCreateRecipeFromUpload, useCreateRecipeFromUrl, useRecipes } from '../lib/queries'
 import type { RecipeDetail, RecipeSummary } from '../lib/types'
-import { AuthedImage, Button, EmptyState, Spinner } from '../components/ui'
+import Icon from '../components/Icon'
+import {
+  AuthedImage,
+  Button,
+  DegradedBanner,
+  EmptyState,
+  IconButton,
+  ScreenHeader,
+  SectionHeading,
+  SegmentedControl,
+  Spinner,
+} from '../components/ui'
 
 const MAX_UPLOAD_FILES = 6
 const MAX_UPLOAD_BYTES = 15_000_000
+const SHELF_MIN_RECIPES = 6 // below this the grid alone reads better than shelves
+const QUICK_MINUTES = 30
+const COOK_AGAIN_DAYS = 21
 
-function domainOf(url: string | null): string {
+// "cooking.nytimes.com" → "nytimes", "hot-thai-kitchen.com" → "hot-thai-kitchen".
+function sourceName(url: string | null): string {
   if (!url) return ''
   try {
-    return new URL(url).hostname.replace(/^www\./, '')
+    const parts = new URL(url).hostname.replace(/^www\./, '').split('.')
+    return parts.length >= 2 ? parts[parts.length - 2] : parts[0]
   } catch {
     return ''
   }
 }
 
+// Minutes from free-text ("1 hr 15 min", "45 min", "1 hour") or ISO-8601
+// ("PT1H15M") durations. null when it can't be read.
+function minutesOf(text: string | null): number | null {
+  if (!text) return null
+  const iso = /^P(?:T)?(?:(\d+)H)?(?:(\d+)M)?/i.exec(text.trim())
+  if (iso && (iso[1] || iso[2])) return Number(iso[1] ?? 0) * 60 + Number(iso[2] ?? 0)
+  const h = /(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hour|hours)\b/i.exec(text)
+  const m = /(\d+)\s*(?:m|min|mins|minute|minutes)\b/i.exec(text)
+  if (!h && !m) return null
+  return Math.round(Number(h?.[1] ?? 0) * 60 + Number(m?.[1] ?? 0))
+}
+
+function metaLine(r: RecipeSummary): string {
+  return [r.total_time, sourceName(r.source_url)].filter(Boolean).join(' · ')
+}
+
 export default function Cookbook() {
   const [search, setSearch] = useState('')
   const [addOpen, setAddOpen] = useState(false)
+  const all = useRecipes('') // unfiltered list → count + shelves (shared cache with the grid)
   const recipes = useRecipes(search)
   const navigate = useNavigate()
 
   const items = recipes.data ?? []
+  const allItems = useMemo(() => all.data ?? [], [all.data])
   const isSearching = search.trim().length > 0
+  const open = (id: string) => navigate(`/app/cookbook/${id}`)
+
+  const shelves = useMemo(() => {
+    const now = Date.now()
+    const recent = [...allItems]
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .slice(0, 8)
+    const quick = allItems
+      .map((r) => ({ r, min: minutesOf(r.total_time) }))
+      .filter((x): x is { r: RecipeSummary; min: number } => x.min != null && x.min <= QUICK_MINUTES)
+      .sort((a, b) => a.min - b.min)
+      .slice(0, 3)
+      .map((x) => x.r)
+    const again = allItems
+      .filter(
+        (r) =>
+          r.last_cooked_at &&
+          now - new Date(r.last_cooked_at).getTime() > COOK_AGAIN_DAYS * 86_400_000,
+      )
+      .sort((a, b) => (a.last_cooked_at ?? '').localeCompare(b.last_cooked_at ?? ''))
+      .slice(0, 6)
+    return { recent, quick, again }
+  }, [allItems])
+
+  const showShelves = !isSearching && allItems.length >= SHELF_MIN_RECIPES
 
   return (
-    <div className="px-5 pb-8 pt-3.5">
-      <div className="font-serif text-[28px] font-semibold tracking-tight">Cookbook</div>
+    <div className="pb-10">
+      <ScreenHeader
+        title="Cookbook"
+        subtitle={all.data ? pluralize(all.data.length, 'recipe') : undefined}
+        action={
+          <IconButton icon="plus" label="Add a recipe" variant="accent" onClick={() => setAddOpen(true)} />
+        }
+      />
 
-      <div className="relative my-3.5">
-        <input
-          placeholder="Search recipes"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-[11px] border border-line2 bg-surface px-3.5 py-3 text-sm outline-none focus:border-terracotta"
-        />
+      <div className="px-5 pt-[18px]">
+        <label className="flex h-[46px] items-center gap-2.5 rounded-[14px] border border-line bg-surface px-3.5 focus-within:border-terracotta">
+          <Icon name="search" size={18} strokeWidth={2} className="flex-none text-faint" />
+          <input
+            type="search"
+            aria-label="Search recipes"
+            placeholder="Search recipes"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-faint [&::-webkit-search-cancel-button]:hidden"
+          />
+          {isSearching && (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={() => setSearch('')}
+              className="-mr-2 flex h-9 w-9 flex-none items-center justify-center rounded-full text-muted hover:bg-chip"
+            >
+              <Icon name="x" size={16} strokeWidth={2.2} />
+            </button>
+          )}
+        </label>
       </div>
 
-      {recipes.isLoading ? (
-        <CardGrid>
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i}>
-              <div className="sk h-[130px] rounded-card" />
-              <div className="sk mt-2 h-3.5 w-[85%] rounded" />
-              <div className="sk mt-1.5 h-3 w-[55%] rounded" />
-            </div>
-          ))}
-        </CardGrid>
+      {recipes.isError ? (
+        <div className="px-5 pt-6">
+          <DegradedBanner tone="danger" onRetry={() => recipes.refetch()} retrying={recipes.isFetching}>
+            Couldn't load your recipes.
+          </DegradedBanner>
+        </div>
+      ) : recipes.isLoading ? (
+        <section className="px-5 pt-[30px]">
+          <div className="sk h-6 w-36 rounded" />
+          <CardGrid>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i}>
+                <div className="sk aspect-[4/3] rounded-[14px]" />
+                <div className="sk mt-2.5 h-3.5 w-[85%] rounded" />
+                <div className="sk mt-1.5 h-3 w-[55%] rounded" />
+              </div>
+            ))}
+          </CardGrid>
+        </section>
       ) : items.length === 0 ? (
-        isSearching ? (
-          <EmptyState glyph="🔍" message={`No recipes match "${search.trim()}".`} />
-        ) : (
-          <EmptyState
-            glyph="📖"
-            message="Recipes you pick get saved here automatically — or add one from a URL, photos, or a PDF."
-            action={
-              <Button className="mt-1 px-4 py-2.5 text-sm" onClick={() => setAddOpen(true)}>
-                Add a recipe
-              </Button>
-            }
-          />
-        )
+        <div className="px-5 pt-6">
+          {isSearching ? (
+            <EmptyState icon="search" message={`No recipes match "${search.trim()}".`} />
+          ) : (
+            <EmptyState
+              icon="book"
+              message="Recipes you pick get saved here automatically — or add one from a URL, photos, or a PDF."
+              action={
+                <Button className="mt-1 h-11 px-5 text-sm" onClick={() => setAddOpen(true)}>
+                  <Icon name="plus" size={16} strokeWidth={2.4} />
+                  Add a recipe
+                </Button>
+              }
+            />
+          )}
+        </div>
       ) : (
-        <CardGrid>
-          {items.map((r) => (
-            <RecipeCard key={r.id} recipe={r} onOpen={() => navigate(`/app/cookbook/${r.id}`)} />
-          ))}
-        </CardGrid>
-      )}
+        <>
+          {showShelves && shelves.again.length > 0 && (
+            <Shelf title="Cook again" sub="Recipes you haven't made in a while">
+              {shelves.again.map((r) => (
+                <button
+                  key={r.id}
+                  onClick={() => open(r.id)}
+                  className="w-[270px] flex-none self-start text-left lg:w-[300px]"
+                >
+                  <div className="relative h-[176px] overflow-hidden rounded-card bg-tile lg:h-[196px]">
+                    <AuthedImage path={r.image_url} alt="" label="recipe photo" />
+                    <span className="absolute bottom-2.5 left-2.5 rounded-[12px] bg-surface/85 px-2.5 py-[5px] text-[12px] font-semibold text-ink backdrop-blur">
+                      Cooked {shortDate(r.last_cooked_at)}
+                    </span>
+                  </div>
+                  <div className="mt-2.5 line-clamp-2 font-serif text-[18px] font-medium leading-[1.2] text-ink">
+                    {r.title}
+                  </div>
+                  <div className="mt-[3px] text-[13px] text-muted">{metaLine(r)}</div>
+                </button>
+              ))}
+            </Shelf>
+          )}
 
-      {items.length > 0 && (
-        <button
-          onClick={() => setAddOpen(true)}
-          className="mt-4 w-full rounded-card border border-dashed border-[#D8CDB9] bg-transparent py-3.5 text-sm font-semibold text-terracotta"
-        >
-          ＋ Add a recipe
-        </button>
+          {showShelves && (
+            <Shelf title="Recently added">
+              {shelves.recent.map((r) => (
+                <button
+                  key={r.id}
+                  onClick={() => open(r.id)}
+                  className="w-[148px] flex-none self-start text-left lg:w-[168px]"
+                >
+                  <div className="h-[148px] overflow-hidden rounded-[14px] bg-tile lg:h-[168px]">
+                    <AuthedImage path={r.image_url} alt="" label="recipe photo" />
+                  </div>
+                  <div className="mt-2 line-clamp-2 font-serif text-[15.5px] font-medium leading-[1.22] text-ink">
+                    {r.title}
+                  </div>
+                  {r.total_time && (
+                    <div className="mt-[3px] text-[12.5px] text-muted">{r.total_time}</div>
+                  )}
+                </button>
+              ))}
+            </Shelf>
+          )}
+
+          {showShelves && shelves.quick.length > 0 && (
+            <section aria-labelledby="sh-quick" className="px-5 pt-[26px]">
+              <SectionHeading id="sh-quick">On the table in 30 minutes</SectionHeading>
+              <div className="mt-3 flex flex-col gap-2.5">
+                {shelves.quick.map((r) => (
+                  <button
+                    key={r.id}
+                    onClick={() => open(r.id)}
+                    className="flex items-center gap-3.5 rounded-card border border-line bg-surface p-2.5 text-left hover:border-line2"
+                  >
+                    <div className="h-[72px] w-[72px] flex-none overflow-hidden rounded-[12px] bg-tile">
+                      <AuthedImage path={r.image_url} alt="" label="recipe photo" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="line-clamp-2 font-serif text-[16.5px] font-medium leading-[1.2] text-ink">
+                        {r.title}
+                      </div>
+                      <div className="mt-1 flex items-center gap-1.5 text-[13px] text-muted">
+                        <Icon name="clock" size={14} strokeWidth={2} className="flex-none" />
+                        <span className="truncate">{metaLine(r)}</span>
+                      </div>
+                    </div>
+                    <Icon name="chevronRight" size={18} strokeWidth={2} className="mr-1 flex-none text-faint" />
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section aria-labelledby="sh-all" className={`px-5 ${showShelves ? 'pt-[30px]' : 'pt-6'}`}>
+            <SectionHeading
+              id="sh-all"
+              sub={pluralize(items.length, isSearching ? 'match' : 'recipe', isSearching ? 'matches' : undefined)}
+            >
+              {isSearching ? 'Search results' : 'All recipes'}
+            </SectionHeading>
+            <CardGrid>
+              {items.map((r) => (
+                <RecipeCard key={r.id} recipe={r} onOpen={() => open(r.id)} />
+              ))}
+            </CardGrid>
+          </section>
+        </>
       )}
 
       {addOpen && (
@@ -89,7 +259,7 @@ export default function Cookbook() {
           onClose={() => setAddOpen(false)}
           onView={(id) => {
             setAddOpen(false)
-            navigate(`/app/cookbook/${id}`)
+            open(id)
           }}
         />
       )}
@@ -97,22 +267,42 @@ export default function Cookbook() {
   )
 }
 
-function CardGrid({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-3">{children}</div>
+function Shelf({ title, sub, children }: { title: string; sub?: string; children: ReactNode }) {
+  const id = `sh-${title.toLowerCase().replace(/[^a-z]+/g, '-')}`
+  return (
+    <section aria-labelledby={id} className="pt-[26px]">
+      <SectionHeading id={id} sub={sub} className="px-5">
+        {title}
+      </SectionHeading>
+      <div className="no-scrollbar flex gap-3 overflow-x-auto px-5 pb-1 pt-3">{children}</div>
+    </section>
+  )
+}
+
+function CardGrid({ children }: { children: ReactNode }) {
+  return (
+    <div className="mt-3.5 grid grid-cols-2 gap-x-3.5 gap-y-[18px] lg:grid-cols-3 lg:gap-x-5 lg:gap-y-6">
+      {children}
+    </div>
+  )
 }
 
 function RecipeCard({ recipe, onOpen }: { recipe: RecipeSummary; onOpen: () => void }) {
-  const domain = domainOf(recipe.source_url)
-  const meta = [domain, cookedLabel(recipe.last_cooked_at)].filter(Boolean).join(' · ')
+  const meta = metaLine(recipe)
   return (
-    <button onClick={onOpen} className="cursor-pointer text-left">
-      <div className="h-[130px] overflow-hidden rounded-card border border-line2">
-        <AuthedImage path={recipe.image_url} alt={recipe.title} label="photo" />
+    <button onClick={onOpen} className="group min-w-0 cursor-pointer self-start text-left">
+      <div className="aspect-[4/3] overflow-hidden rounded-[14px] bg-tile">
+        <AuthedImage
+          path={recipe.image_url}
+          alt=""
+          label="recipe photo"
+          className="transition-transform duration-300 group-hover:scale-[1.03]"
+        />
       </div>
-      <div className="mt-2 line-clamp-2 font-serif text-[14.5px] font-semibold leading-tight text-ink">
+      <div className="mt-2 line-clamp-2 font-serif text-[15.5px] font-medium leading-[1.22] text-ink">
         {recipe.title}
       </div>
-      <div className="mt-0.5 text-[11.5px] text-faint">{meta}</div>
+      {meta && <div className="mt-[3px] truncate text-[12.5px] text-muted">{meta}</div>}
     </button>
   )
 }
@@ -120,6 +310,9 @@ function RecipeCard({ recipe, onOpen }: { recipe: RecipeSummary; onOpen: () => v
 // --- Add recipe sheet (URL or photos/PDF) ----------------------------------
 
 type AddMode = 'url' | 'upload'
+
+const fieldCls =
+  'w-full rounded-[14px] border border-line2 bg-cream px-3.5 text-[15px] text-ink outline-none placeholder:text-faint focus:border-terracotta disabled:opacity-60'
 
 function AddRecipeSheet({
   onClose,
@@ -134,22 +327,63 @@ function AddRecipeSheet({
 
   return (
     <div
-      className="fixed inset-0 z-30 flex animate-pop items-end justify-center sm:items-center"
-      style={{ background: 'rgba(40,30,20,.4)' }}
+      className="fixed inset-0 z-30 flex animate-pop items-end justify-center bg-dark/50 sm:items-center sm:p-6"
       onClick={() => {
         if (!busy.current) onClose()
       }}
     >
       <div
-        className="max-h-[92%] w-full max-w-[420px] overflow-y-auto rounded-t-[22px] bg-surface p-[22px] shadow-modal sm:rounded-[18px]"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Add a recipe"
+        className="max-h-[92%] w-full max-w-[440px] overflow-y-auto rounded-t-panel bg-surface px-5 pb-6 pt-2.5 shadow-modal sm:rounded-panel sm:pt-6"
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-line2 sm:hidden" aria-hidden />
         {added ? (
           <AddedView added={added} onClose={onClose} onView={onView} />
         ) : (
           <>
-            <div className="font-serif text-xl font-semibold">Add a recipe</div>
-            <ModeTabs mode={mode} onChange={setMode} />
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="font-serif text-[24px] font-medium leading-tight tracking-[-0.01em]">
+                Add a recipe
+              </h2>
+              <IconButton
+                icon="x"
+                label="Close"
+                variant="plain"
+                size={36}
+                iconSize={18}
+                className="-mr-1.5 -mt-1"
+                onClick={() => {
+                  if (!busy.current) onClose()
+                }}
+              />
+            </div>
+            <SegmentedControl
+              label="Import from"
+              className="mt-3.5"
+              value={mode}
+              onChange={setMode}
+              options={[
+                {
+                  value: 'url',
+                  label: (
+                    <>
+                      <Icon name="link" size={15} strokeWidth={2} /> Paste URL
+                    </>
+                  ),
+                },
+                {
+                  value: 'upload',
+                  label: (
+                    <>
+                      <Icon name="camera" size={15} strokeWidth={2} /> Photos or PDF
+                    </>
+                  ),
+                },
+              ]}
+            />
             {mode === 'url' ? (
               <UrlForm onAdded={setAdded} onCancel={onClose} onBusy={(b) => (busy.current = b)} />
             ) : (
@@ -158,26 +392,6 @@ function AddRecipeSheet({
           </>
         )}
       </div>
-    </div>
-  )
-}
-
-function ModeTabs({ mode, onChange }: { mode: AddMode; onChange: (m: AddMode) => void }) {
-  const tab = (m: AddMode, label: string) => (
-    <button
-      key={m}
-      onClick={() => onChange(m)}
-      className={`flex-1 rounded-[9px] py-2 text-[13px] font-semibold transition-colors ${
-        mode === m ? 'bg-surface text-ink shadow-sm' : 'text-muted'
-      }`}
-    >
-      {label}
-    </button>
-  )
-  return (
-    <div className="mt-3 flex gap-1 rounded-[11px] border border-line2 bg-cream p-1">
-      {tab('url', 'Paste URL')}
-      {tab('upload', 'Photos or PDF')}
     </div>
   )
 }
@@ -193,25 +407,30 @@ function AddedView({
 }) {
   return (
     <>
-      <div className="font-serif text-xl font-semibold">Added to your cookbook</div>
-      <div className="mt-3 flex gap-3">
-        <div className="h-[64px] w-[64px] flex-none overflow-hidden rounded-[11px] border border-line2">
-          <AuthedImage path={added.image_url} alt={added.title} label="photo" />
+      <div className="flex items-center gap-2 text-[11.5px] font-bold uppercase tracking-[.07em] text-success">
+        <Icon name="check" size={14} strokeWidth={3} />
+        Added to your cookbook
+      </div>
+      <div className="mt-3.5 overflow-hidden rounded-card border border-line bg-cream">
+        <div className="aspect-[16/9] w-full overflow-hidden bg-tile">
+          <AuthedImage path={added.image_url} alt="" label="recipe photo" />
         </div>
-        <div className="min-w-0">
-          <div className="line-clamp-2 font-serif text-[15px] font-semibold leading-tight">
+        <div className="px-4 py-3">
+          <div className="line-clamp-2 font-serif text-[19px] font-medium leading-[1.2] text-ink">
             {added.title}
           </div>
-          <div className="mt-1 text-[12px] text-muted">
-            {added.ingredients.length} ingredients · {added.instructions.length} steps
+          <div className="mt-1 text-[13px] text-muted">
+            {pluralize(added.ingredients.length, 'ingredient')} ·{' '}
+            {pluralize(added.instructions.length, 'step')}
+            {added.total_time ? ` · ${added.total_time}` : ''}
           </div>
         </div>
       </div>
       <div className="mt-4 flex gap-2.5">
-        <Button variant="secondary" className="flex-1 py-3 text-sm" onClick={onClose}>
+        <Button variant="secondary" className="h-[50px] flex-1 text-[15px]" onClick={onClose}>
           Done
         </Button>
-        <Button className="flex-1 py-3 text-sm" onClick={() => onView(added.id)}>
+        <Button className="h-[50px] flex-1 text-[15px]" onClick={() => onView(added.id)}>
           View recipe
         </Button>
       </div>
@@ -221,15 +440,18 @@ function AddedView({
 
 function ErrorBox({ message, reasons }: { message: string; reasons?: string[] }) {
   return (
-    <div className="mt-3 rounded-[10px] border border-danger-border bg-danger-bg px-3 py-2.5 text-[13px] text-danger">
-      {message}
-      {reasons && reasons.length > 0 && (
-        <ul className="mt-1.5 list-disc pl-4 text-[12px]">
-          {reasons.map((r) => (
-            <li key={r}>{reasonLabel(r)}</li>
-          ))}
-        </ul>
-      )}
+    <div className="mt-3.5 flex gap-2.5 rounded-[14px] border border-danger-border bg-danger-bg px-3.5 py-3 text-[13px] text-danger">
+      <Icon name="alert" size={17} className="mt-px flex-none" />
+      <div className="min-w-0">
+        {message}
+        {reasons && reasons.length > 0 && (
+          <ul className="mt-1.5 list-disc pl-4 text-[12.5px]">
+            {reasons.map((r) => (
+              <li key={r}>{reasonLabel(r)}</li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   )
 }
@@ -248,6 +470,46 @@ function reasonLabel(reason: string): string {
     empty_pdf: 'The PDF had no readable pages.',
   }
   return map[reason] ?? reason.replace(/_/g, ' ')
+}
+
+function Progress({ children }: { children: ReactNode }) {
+  return (
+    <div
+      className="mt-3.5 flex items-center gap-2.5 rounded-[14px] bg-chip px-3.5 py-3 text-[13px] text-muted"
+      role="status"
+    >
+      <Spinner />
+      <span>{children}</span>
+    </div>
+  )
+}
+
+function SheetActions({
+  busy,
+  canSubmit,
+  onCancel,
+  onSubmit,
+}: {
+  busy: boolean
+  canSubmit: boolean
+  onCancel: () => void
+  onSubmit: () => void
+}) {
+  return (
+    <div className="mt-5 flex gap-2.5">
+      <Button variant="secondary" className="h-[50px] flex-1 text-[15px]" onClick={onCancel} disabled={busy}>
+        Cancel
+      </Button>
+      <Button
+        className="h-[50px] flex-1 text-[15px]"
+        onClick={onSubmit}
+        busy={busy}
+        disabled={busy || !canSubmit}
+      >
+        {busy ? 'Reading…' : 'Add recipe'}
+      </Button>
+    </div>
+  )
 }
 
 function UrlForm({
@@ -287,42 +549,29 @@ function UrlForm({
 
   return (
     <>
-      <div className="mt-3 text-[13px] text-muted">
+      <p className="mt-4 text-[13.5px] leading-relaxed text-muted">
         Paste a recipe URL — we'll read the ingredients and steps.
-      </div>
+      </p>
       {error && <ErrorBox message={error} reasons={reasons} />}
       <input
         autoFocus
+        type="url"
+        inputMode="url"
+        aria-label="Recipe URL"
         placeholder="https://…"
         value={url}
         onChange={(e) => setUrl(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && submit()}
         disabled={create.isPending}
-        className="mt-3 w-full rounded-[11px] border border-line2 bg-cream px-3.5 py-3 text-sm outline-none focus:border-terracotta disabled:opacity-60"
+        className={`mt-3 h-[50px] ${fieldCls}`}
       />
-      {create.isPending && (
-        <div className="mt-3 flex items-center gap-2 text-[12.5px] text-muted">
-          <Spinner /> Reading the page… this can take a few seconds.
-        </div>
-      )}
-      <div className="mt-4 flex gap-2.5">
-        <Button
-          variant="secondary"
-          className="flex-1 py-3 text-sm"
-          onClick={onCancel}
-          disabled={create.isPending}
-        >
-          Cancel
-        </Button>
-        <Button
-          className="flex-1 py-3 text-sm"
-          onClick={submit}
-          busy={create.isPending}
-          disabled={create.isPending || !url.trim()}
-        >
-          {create.isPending ? 'Reading…' : 'Add recipe'}
-        </Button>
-      </div>
+      {create.isPending && <Progress>Reading the page… this can take a few seconds.</Progress>}
+      <SheetActions
+        busy={create.isPending}
+        canSubmit={!!url.trim()}
+        onCancel={onCancel}
+        onSubmit={submit}
+      />
     </>
   )
 }
@@ -425,13 +674,16 @@ function UploadForm({
     }
   }
 
+  const rowBtn =
+    'flex h-9 w-9 items-center justify-center rounded-full text-muted hover:bg-chip disabled:opacity-30 disabled:hover:bg-transparent'
+
   return (
     <>
-      <div className="mt-3 text-[13px] text-muted">
+      <p className="mt-4 text-[13.5px] leading-relaxed text-muted">
         Upload photos of a recipe (front and back, or a two-page spread) or a PDF. Order matters —
         arrange pages top to bottom. We'll transcribe exactly what's visible; check it against your
         photo before saving.
-      </div>
+      </p>
       {error && <ErrorBox message={error} reasons={reasons} />}
 
       <input
@@ -445,46 +697,49 @@ function UploadForm({
       />
 
       {picked.length > 0 && (
-        <ul className="mt-3 flex flex-col gap-2">
+        <ul className="mt-3.5 flex flex-col gap-2">
           {picked.map((p, i) => (
             <li
               key={`${p.file.name}-${i}`}
-              className="flex items-center gap-2.5 rounded-[11px] border border-line2 bg-cream p-2"
+              className="flex items-center gap-3 rounded-[14px] border border-line bg-cream p-2"
             >
-              <div className="flex h-[46px] w-[46px] flex-none items-center justify-center overflow-hidden rounded-[8px] border border-line2 bg-surface">
+              <div className="flex h-12 w-12 flex-none items-center justify-center overflow-hidden rounded-[10px] bg-chip text-muted">
                 {p.previewUrl ? (
                   <img src={p.previewUrl} alt={p.file.name} className="h-full w-full object-cover" />
                 ) : (
-                  <span className="text-[20px]">📄</span>
+                  <Icon name="file" size={22} strokeWidth={1.8} />
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="truncate text-[12.5px] font-medium text-ink">{p.file.name}</div>
-                <div className="text-[11px] text-faint">Page {i + 1}</div>
+                <div className="truncate text-[13.5px] font-medium text-ink">{p.file.name}</div>
+                <div className="text-[12px] text-faint">Page {i + 1}</div>
               </div>
-              <div className="flex flex-none items-center gap-1">
+              <div className="flex flex-none items-center">
                 <button
+                  type="button"
                   aria-label="Move up"
                   onClick={() => move(i, -1)}
                   disabled={i === 0}
-                  className="rounded-[7px] px-2 py-1 text-[13px] text-muted disabled:opacity-30"
+                  className={rowBtn}
                 >
-                  ↑
+                  <Icon name="chevronUp" size={17} strokeWidth={2.2} />
                 </button>
                 <button
+                  type="button"
                   aria-label="Move down"
                   onClick={() => move(i, 1)}
                   disabled={i === picked.length - 1}
-                  className="rounded-[7px] px-2 py-1 text-[13px] text-muted disabled:opacity-30"
+                  className={rowBtn}
                 >
-                  ↓
+                  <Icon name="chevronDown" size={17} strokeWidth={2.2} />
                 </button>
                 <button
+                  type="button"
                   aria-label="Remove"
                   onClick={() => removeAt(i)}
-                  className="rounded-[7px] px-2 py-1 text-[13px] text-danger"
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-danger hover:bg-danger-bg"
                 >
-                  ✕
+                  <Icon name="x" size={16} strokeWidth={2.2} />
                 </button>
               </div>
             </li>
@@ -493,46 +748,36 @@ function UploadForm({
       )}
 
       <button
+        type="button"
         onClick={() => inputRef.current?.click()}
         disabled={create.isPending || picked.length >= MAX_UPLOAD_FILES}
-        className="mt-3 w-full rounded-[11px] border border-dashed border-[#D8CDB9] bg-transparent py-3 text-[13px] font-semibold text-terracotta disabled:opacity-40"
+        className="mt-3.5 flex h-[50px] w-full items-center justify-center gap-2 rounded-[14px] border border-dashed border-line2 bg-transparent text-[14px] font-semibold text-terracotta-deep hover:bg-cream disabled:opacity-40"
       >
-        {picked.length === 0 ? '＋ Choose photos or a PDF' : '＋ Add another page'}
+        <Icon name={picked.length === 0 ? 'upload' : 'plus'} size={17} strokeWidth={2.2} />
+        {picked.length === 0 ? 'Choose photos or a PDF' : 'Add another page'}
       </button>
 
       <input
-        placeholder="Optional hint — e.g. the pasta recipe on the left page"
+        aria-label="Hint (optional)"
+        placeholder="Optional hint, e.g. “the recipe on the left”"
         value={hint}
         onChange={(e) => setHint(e.target.value)}
         disabled={create.isPending}
-        className="mt-3 w-full rounded-[11px] border border-line2 bg-cream px-3.5 py-3 text-sm outline-none focus:border-terracotta disabled:opacity-60"
+        className={`mt-3 h-[50px] ${fieldCls}`}
       />
 
       {create.isPending && (
-        <div className="mt-3 flex items-center gap-2 text-[12.5px] text-muted">
-          <Spinner /> Reading your {picked.length > 1 ? 'pages' : 'photo'}… this can take a few
-          seconds.
-        </div>
+        <Progress>
+          Reading your {picked.length > 1 ? 'pages' : 'photo'}… this can take a few seconds.
+        </Progress>
       )}
 
-      <div className="mt-4 flex gap-2.5">
-        <Button
-          variant="secondary"
-          className="flex-1 py-3 text-sm"
-          onClick={onCancel}
-          disabled={create.isPending}
-        >
-          Cancel
-        </Button>
-        <Button
-          className="flex-1 py-3 text-sm"
-          onClick={submit}
-          busy={create.isPending}
-          disabled={create.isPending || picked.length === 0}
-        >
-          {create.isPending ? 'Reading…' : 'Add recipe'}
-        </Button>
-      </div>
+      <SheetActions
+        busy={create.isPending}
+        canSubmit={picked.length > 0}
+        onCancel={onCancel}
+        onSubmit={submit}
+      />
     </>
   )
 }
