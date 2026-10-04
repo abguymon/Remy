@@ -21,7 +21,14 @@ discover recipes → pick → consolidated shopping list → match to real Kroge
 products → add to the real cart, handing off to the store banner's site
 (fredmeyer.com etc., `kroger/banners.py`) for checkout. Selected recipes are
 saved to a local cookbook, which also imports from URLs and from photos/PDFs
-(vision extraction).
+(vision extraction). The cookbook has favorites/ratings/notes/tags, ingredient
+scaling with US/metric (author conversions preferred), and a "cook this week"
+queue whose recipes can be ordered as one plan that starts at list review
+(`POST /plan/from-recipes`) — PRD FR-27–FR-32.
+
+The web UI's visual language is DESIGN_BRIEF §8: theme tokens are CSS
+variables (light + dark) in `src/index.css`, icons come from
+`components/Icon.tsx`, no hard-coded colors or emoji.
 
 ## v2 architecture (PRD §4)
 

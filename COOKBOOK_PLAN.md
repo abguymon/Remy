@@ -1,6 +1,6 @@
 # Cookbook Plan — turning the Cookbook tab into a real recipe library
 
-Status: **v1 built** (2026-10-04, branch `rebrand`): items 1–5 plus the app-wide visual rebrand and dark mode (item 9). v2 items 6–8 remain.
+Status: **v1 built** (2026-10-04): items 2–5 plus the app-wide visual rebrand and dark mode (item 9), ingredient sections and author unit conversions, and a "cook this week" queue that orders groceries for queued recipes. Item 1 (cook mode) was built, then removed — not wanted. v2 items 6–8 remain. Requirements now live in `PRD.md` FR-27–FR-32.
 
 ## Why
 

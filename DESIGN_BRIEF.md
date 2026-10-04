@@ -80,9 +80,12 @@ Navigation: bottom tab bar on phone (Plan · Cookbook · Cart · Settings), left
 - "Add recipe" → paste-URL sheet (FR-8) with parse progress and a parsed preview to confirm.
 - **States:** empty first-run ("Recipes you pick get saved here automatically — or paste a URL"), search-no-results, parse-failed ("Couldn't read that page — try another URL"; LLM-fallback in progress indicator).
 
+> **Oct 2026 additions (FR-27–FR-31):** "This week" queue section with an "Order groceries" CTA at the top of the Cookbook, a round +/✓ queue toggle on every recipe card, filter chips (All · Favorites · top tags · Collections), heart badges, and a Collections screen of per-tag photo mosaics.
+
 ### 4.8 Recipe detail
 - Browse register, the most editorial screen: full-bleed image, serif title, meta row (source link, yield, prep/cook time), ingredients list, numbered instructions (FR-19).
 - Actions: edit fields (FR-8), delete (confirm), "I cooked this" (stamps last_cooked_at, FR-20), open original.
+- **Oct 2026 (FR-27–FR-31):** primary action is "Cook this week" (toggles to "On this week's list"); secondary row "Cooked it" · "Edit". The source link under the title is the only link to the original. Favorite heart on the photo, star rating beside the source link, tag chips above the title, made-count stat, notes card. Ingredients show section headings, a servings stepper and a US/Metric toggle. (A full-screen cook mode was built and then removed at the user's request.)
 
 ### 4.9 Cart (local record)
 - Shows the running local record of what Remy has added, latest order report, order history (FR-17).

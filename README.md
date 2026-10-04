@@ -192,6 +192,26 @@ recipes directly from **Cookbook → Add recipe**:
   transcribe only what it can read (never invent lines), and the preview is
   your check.
 
+Imports keep ingredient sections ("For the dough:") and, on sites using WP
+Recipe Maker, the author's own US/metric conversion of each line, which the
+recipe page's US/Metric toggle prefers over computed conversions.
+
+In the cookbook you can favorite, rate, tag and annotate recipes, browse by tag
+(Collections), and scale ingredient lists. Tap **+** on any recipe (or "Cook
+this week" on its page) to queue it; **Order groceries** in the Cookbook's
+"This week" section, or on the Plan tab, builds one shopping list for every
+queued recipe and continues into product matching. Marking a recipe cooked
+takes it off the list.
+
+To add sections and author conversions to recipes saved before they were
+captured (re-reads each source page; only fills lines that still match, never
+overwrites edits):
+
+```bash
+docker compose exec remy-api python -m remy_api enrich-recipes --dry-run
+docker compose exec remy-api python -m remy_api enrich-recipes
+```
+
 ### Importing an existing Mealie recipe collection
 
 If you are migrating from the old Mealie-backed setup, a one-shot CLI imports

@@ -76,6 +76,15 @@ Sections 1–3 describe the product. Sections 4–8 describe the system. Section
 - **FR-19**: A Recipes screen lists saved recipes (card grid: image, title, source, last cooked) with search and delete. Clicking opens a detail view: image, meta, ingredients, instructions, link to original source.
 - **FR-20**: Saved recipes are first-class discovery sources (FR-2). Marking a plan "done" (or one-click on the recipe) stamps `last_cooked_at`.
 
+Cookbook library (added Oct 2026; see `COOKBOOK_PLAN.md`). All of it is per-user, like recipes.
+
+- **FR-27**: Favorites, a 1–5 rating, free-text notes and free-form tags on each recipe. Tags are de-duplicated case-insensitively, searchable, listed with counts (`GET /recipes/tags`), and shown as Collections (one photo-mosaic card per tag, Favorites first). "Cooked it" increments `cooked_count` as well as stamping `last_cooked_at`.
+- **FR-28**: Browse aids on the Cookbook: Favorites and most-used-tag filter chips; shelves for "Cook again" (favorites and past hits not made in 3+ weeks), "Recently added" and "On the table in 30 minutes". Shelves hide while searching or filtering.
+- **FR-29**: "Cook this week": any recipe can be queued for this week (`this_week` on the recipe); cooking it clears the flag. "Order groceries" sends the queued recipes to `POST /plan/from-recipes`, which creates a plan whose meals are those recipes, already selected, and starts it at list review (no discovery or selection). The usual one-active-plan rule applies.
+- **FR-30**: Ingredient scaling and units, in the browser: a servings stepper named after the yield ("14 rolls"), or ½×–3× when the yield has no number, plus a US/Metric toggle. Lines are parsed from their raw text; unparseable lines show unchanged, never with a guessed number. Conversion prefers the recipe author's own other-system line (FR-31), then ingredient densities (cups of flour ↔ grams), rounded to measurable amounts.
+- **FR-31**: Imports keep each ingredient line's **section** ("For the dough:") from the page's ingredient groups, and the author's **alternate-unit line** (`alt_raw`) from WP Recipe Maker data when present. Edits keep a line's `alt_raw` only while its text is unchanged. `python -m remy_api enrich-recipes` backfills both for saved recipes from their source pages, only on lines that still match and never over user edits.
+- **FR-32**: Choosing a web candidate whose page is already saved (same host and path, ignoring `www`, query and fragment) reuses the saved recipe instead of saving a duplicate.
+
 ### 2.6 Settings
 
 - **FR-21**: Kroger account: connect (OAuth2 redirect flow, see §7.2), status display, disconnect.
