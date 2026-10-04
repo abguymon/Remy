@@ -26,6 +26,7 @@ from __future__ import annotations
 import logging
 import re
 import unicodedata
+from urllib.parse import urlparse
 
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -150,6 +151,7 @@ async def create_recipe(
         cook_time=parsed.cook_time,
         total_time=parsed.total_time,
         instructions=list(parsed.instructions),
+        ingredients=[],  # initialized so a zero-ingredient recipe never lazy-loads in async
     )
     for position, ing in enumerate(parsed.ingredients):
         recipe.ingredients.append(
@@ -316,6 +318,35 @@ async def delete_recipe(session: AsyncSession, user_id: str, recipe_id: str) -> 
     await session.delete(recipe)
     await session.commit()
     delete_recipe_image(recipe_id)
+
+
+def normalize_recipe_url(url: str | None) -> str | None:
+    """Comparison key for a recipe URL: host without ``www.`` + lowercased path.
+
+    Query strings and fragments are dropped — share links ("?smid=…",
+    "#jump-target") point at the same recipe.
+    """
+    if not url:
+        return None
+    parsed = urlparse(url)
+    host = parsed.netloc.lower()
+    host = host[4:] if host.startswith("www.") else host
+    path = parsed.path.rstrip("/").lower()
+    return f"{host}{path}" if host else url.rstrip("/").lower()
+
+
+async def find_by_source_url(session: AsyncSession, user_id: str, url: str) -> Recipe | None:
+    """The user's saved recipe for ``url`` (normalized), oldest first, if any."""
+    key = normalize_recipe_url(url)
+    if not key:
+        return None
+    rows = await session.execute(
+        select(Recipe).where(Recipe.user_id == user_id, Recipe.source_url.is_not(None)).order_by(Recipe.created_at)
+    )
+    for recipe in rows.scalars():
+        if normalize_recipe_url(recipe.source_url) == key:
+            return recipe
+    return None
 
 
 async def find_by_mealie_slug(session: AsyncSession, user_id: str, mealie_slug: str) -> Recipe | None:

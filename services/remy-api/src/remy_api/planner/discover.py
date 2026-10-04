@@ -22,6 +22,7 @@ from remy_api.models import Plan, PlanStatus, UserSettings
 from remy_api.planner import deps
 from remy_api.planner.schemas import Candidate, Meal, MealCandidates, MealStatus, Origin
 from remy_api.prompts import listicle_filter, saved_recipe_relevance
+from remy_api.recipes.store import normalize_recipe_url
 from remy_api.search.base import SearchError, SearchResult
 
 logger = logging.getLogger("remy.planner.discover")
@@ -39,14 +40,7 @@ def _domain(url: str | None) -> str | None:
     return netloc[4:] if netloc.startswith("www.") else netloc or None
 
 
-def _normalize_url(url: str | None) -> str | None:
-    if not url:
-        return None
-    parsed = urlparse(url)
-    host = parsed.netloc.lower()
-    host = host[4:] if host.startswith("www.") else host
-    path = parsed.path.rstrip("/").lower()
-    return f"{host}{path}" if host else url.rstrip("/").lower()
+_normalize_url = normalize_recipe_url
 
 
 def _dedup(candidates: list[Candidate]) -> list[Candidate]:

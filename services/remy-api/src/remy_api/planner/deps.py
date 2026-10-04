@@ -15,7 +15,7 @@ from remy_api.llm import get_llm_client
 from remy_api.llm.registry import get_prompt_id_llm
 from remy_api.recipes.images import download_recipe_image
 from remy_api.recipes.scraper import scrape_recipe
-from remy_api.recipes.store import create_recipe, get_recipe, search_recipes
+from remy_api.recipes.store import create_recipe, find_by_source_url, get_recipe, search_recipes
 from remy_api.search import cache_thumbnail_images, fetch_thumbnails, get_search_provider
 
 __all__ = [
@@ -26,6 +26,7 @@ __all__ = [
     "cache_thumbnail_images",
     "search_recipes",
     "create_recipe",
+    "find_by_source_url",
     "get_recipe",
     "scrape_recipe",
     "download_recipe_image",

@@ -39,7 +39,14 @@ def _find_candidate(plan: Plan, meal_id: str, candidate_id: str) -> Candidate | 
 
 
 async def _save_web_recipe(session: AsyncSession, user_id: str, url: str) -> tuple[str, str]:
-    """Scrape ``url``, save to cookbook with image; return (recipe_id, title)."""
+    """Scrape ``url``, save to cookbook with image; return (recipe_id, title).
+
+    A URL already in the cookbook (same page, ignoring ``www``/query/fragment)
+    reuses that recipe instead of saving a duplicate copy.
+    """
+    existing = await deps.find_by_source_url(session, user_id, url)
+    if existing is not None:
+        return existing.id, existing.title
     parsed = await deps.scrape_recipe(url, llm=deps.get_prompt_id_llm())
     recipe = await deps.create_recipe(session, user_id, parsed)
     if parsed.image_url:
